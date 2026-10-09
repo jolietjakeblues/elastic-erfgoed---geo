@@ -1,0 +1,269 @@
+{
+  "type": "elasticSearch",
+  "name": "Erfgoed-sdo-nl3",
+  "config": {
+    "indexTemplates": [
+      {
+        "name": "erfgoed-nl3",
+        "index_patterns": "index",
+        "composed_of": [
+          "nl-analyse",
+          "geometrie",
+          "nummers"
+        ]
+      }
+    ],
+    "componentTemplates": [
+      {
+        "name": "nl-analyse",
+        "template": {
+          "settings": {
+            "analysis": {
+              "filter": {
+                "nl_stop": {
+                  "type": "stop",
+                  "stopwords": "_dutch_"
+                },
+                "nl_stam": {
+                  "type": "stemmer",
+                  "language": "dutch_kp"
+                },
+                "nl_samenstellingen": {
+                  "type": "dictionary_decompounder",
+                  "only_longest_match": true,
+                  "min_subword_size": 4,
+                  "word_list": [
+                    "molen",
+                    "toren",
+                    "boerderij",
+                    "schuur",
+                    "woning",
+                    "brug",
+                    "sluis",
+                    "gemaal",
+                    "poort",
+                    "gracht",
+                    "kasteel",
+                    "fort",
+                    "school",
+                    "pakhuis",
+                    "kapel",
+                    "klooster",
+                    "gasthuis",
+                    "hofje",
+                    "villa",
+                    "station",
+                    "fabriek",
+                    "watertoren",
+                    "vuurtoren",
+                    "begraafplaats",
+                    "grafheuvel",
+                    "terp",
+                    "wierde",
+                    "bastion",
+                    "kazerne",
+                    "orgel",
+                    "luidklok",
+                    "uurwerk"
+                  ]
+                },
+                "erfgoed_synoniemen": {
+                  "type": "synonym_graph",
+                  "synonyms": [
+                    "kerk, godshuis => kerk, godshuis, kerkgebouw, parochiekerk, dorpskerk, kruiskerk, zaalkerk, hallenkerk, schuilkerk, kerktoren",
+                    "dijk => dijk, liniedijk, lekdijk, zeedijk, maasdijk, waaldijk, rivierdijk, kanaaldijk, ijsseldijk, lingedijk, grebbeliniedijk, spoordijk",
+                    "begraafplaats, kerkhof, dodenakker",
+                    "boerderij, hoeve",
+                    "kasteel, burcht",
+                    "pastorie, predikantswoning",
+                    "woonhuis, woning",
+                    "terp, wierde",
+                    "vesting, vestingwerk"
+                  ]
+                },
+                "nl_meervoud": {
+                  "type": "stemmer_override",
+                  "rules": [
+                    "molen, molens => molen",
+                    "toren, torens => toren",
+                    "kasteel, kastelen => kasteel",
+                    "gracht, grachten => gracht",
+                    "sluis, sluizen => sluis",
+                    "dijk, dijken => dijk",
+                    "woning, woningen => woning"
+                  ]
+                }
+              },
+              "analyzer": {
+                "nl_index": {
+                  "type": "custom",
+                  "tokenizer": "standard",
+                  "filter": [
+                    "lowercase",
+                    "asciifolding",
+                    "nl_samenstellingen",
+                    "nl_meervoud",
+                    "nl_stop",
+                    "nl_stam"
+                  ]
+                },
+                "nl_zoeken": {
+                  "type": "custom",
+                  "tokenizer": "standard",
+                  "filter": [
+                    "lowercase",
+                    "asciifolding",
+                    "nl_meervoud",
+                    "erfgoed_synoniemen",
+                    "nl_stop",
+                    "nl_stam"
+                  ]
+                },
+                "nl_exact": {
+                  "type": "custom",
+                  "tokenizer": "standard",
+                  "filter": [
+                    "lowercase",
+                    "asciifolding"
+                  ]
+                }
+              },
+              "char_filter": {
+                "soort_uit_uri": {
+                  "type": "pattern_replace",
+                  "pattern": "^.*/id/([a-z]+)/.*$",
+                  "replacement": "$1"
+                }
+              },
+              "normalizer": {
+                "soort": {
+                  "type": "custom",
+                  "char_filter": [
+                    "soort_uit_uri"
+                  ],
+                  "filter": [
+                    "lowercase"
+                  ]
+                }
+              }
+            }
+          },
+          "mappings": {
+            "dynamic_templates": [
+              {
+                "tekst_nl": {
+                  "match_mapping_type": "string",
+                  "mapping": {
+                    "type": "text",
+                    "analyzer": "nl_index",
+                    "search_analyzer": "nl_zoeken",
+                    "fields": {
+                      "keyword": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      },
+                      "exact": {
+                        "type": "text",
+                        "analyzer": "nl_exact"
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "@id": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  },
+                  "soort": {
+                    "type": "keyword",
+                    "normalizer": "soort"
+                  }
+                }
+              },
+              "https://schema org/address": {
+                "type": "text",
+                "analyzer": "nl_exact",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "https://schema org/addressLocality": {
+                "type": "text",
+                "analyzer": "nl_exact",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "https://schema org/addressRegion": {
+                "type": "text",
+                "analyzer": "nl_exact",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "https://schema org/postalCode": {
+                "type": "text",
+                "analyzer": "nl_exact",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "geometrie",
+        "template": {
+          "mappings": {
+            "properties": {
+              "http://www opengis net/ont/geosparql#asWKT": {
+                "type": "geo_shape",
+                "ignore_malformed": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "nummers",
+        "template": {
+          "mappings": {
+            "properties": {
+              "https://schema org/identifier": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  },
+                  "getal": {
+                    "type": "long",
+                    "ignore_malformed": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}
