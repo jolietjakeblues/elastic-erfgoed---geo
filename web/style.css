@@ -178,3 +178,4 @@ article.selected { box-shadow: inset 4px 0 0 var(--geel); }
 .label-marker span::after { border-top-color: var(--kleur, var(--blauw)); }
 .label-marker span.selected { background: var(--geel); } .label-marker span.selected::after { border-top-color: var(--geel); }
 @media (max-width: 760px) { .relation { flex-direction: column; gap: 2px; } }
+.context select { width: auto; min-height: 34px; padding: 2px 8px; font-size: .85rem; }

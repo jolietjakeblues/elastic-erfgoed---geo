@@ -17,7 +17,7 @@ export const searchFields = {
 };
 export const DEFAULT_FIELD = 'Alles';
 export const facets = { soort: 'Soort', addressRegion: 'Provincie/regio', addressLocality: 'Plaats', category: 'Categorie', additionalType: 'Type' };
-// Sorteren op nummer kan niet: identifier staat als tekst in de index (5 komt dan na 10040) en scripts zijn uitgeschakeld.
+// Sorteren op nummer gebruikt identifier.getal (long); het gewone veld is tekst, dan komt 5 na 10040.
 export const sorts = {
   relevantie: { label: 'Relevantie', sort: null },
   naam: { label: 'Naam (A–Z)', sort: [{ [`${fields.name}.keyword`]: { order: 'asc', missing: '_last' } }, '_score'] },

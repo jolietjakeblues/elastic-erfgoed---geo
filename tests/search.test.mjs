@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
+import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
 const region = `${fields.addressRegion}.keyword`, type = `${fields.additionalType}.keyword`;
 const soort = name => ({ prefix: { '@id.keyword': `${BASE}${name}/` } });
 const orvelte = { soort: 'gezicht', nummer: '1325', naam: 'Orvelte', rijksmonument: ['1', '2'], complex: ['9'] };
@@ -95,4 +95,17 @@ test('Verborgen testschakelaar ?jokers=1 voor een jokerteken aan het begin', () 
   assert.equal(active, true); assert.equal(state.jokers, true);
   assert.equal(buildQuery(state).query.query_string.allow_leading_wildcard, true);
   assert.equal(fromParams('?jokers=1').active, false);
+});
+test('Ruimtelijk: binnen een vlak, in de buurt, ligt in, sorteren op nummer', async () => {
+  const { WKT_FIELD } = await import('../web/geo.js');
+  const uri = `${BASE}gezicht/1`;
+  assert.deepEqual(withinClause('POLYGON ((5 52, 6 52, 6 53, 5 52))', uri), { bool: { filter: [{ geo_shape: { [WKT_FIELD]: { shape: 'POLYGON ((5 52, 6 52, 6 53, 5 52))', relation: 'within' } } }], must_not: [{ term: { '@id.keyword': uri } }] } });
+  assert.deepEqual(nearClause({ lat: 52, lon: 5 }, 500, uri).bool.filter[0], { geo_distance: { distance: '500m', [WKT_FIELD]: { lat: 52, lon: 5 } } });
+  const ligtIn = ligtInQuery([{ name: 'a', wkt: 'POINT (5 52)' }]);
+  assert.deepEqual(ligtIn.query.bool.should[0], { geo_shape: { [WKT_FIELD]: { shape: 'POINT (5 52)', relation: 'contains' }, _name: 'a' } });
+  assert.ok(BINNEN.test('rond:rijksmonument:36075:500'));
+  assert.ok(!BINNEN.test('rond:rijksmonument:36075:300'));
+  assert.ok(!BINNEN.test('rond:archeologischterrein:1:500'));
+  assert.equal(fromParams('?binnen=rond:complex:524444:1000').state.binnen, 'rond:complex:524444:1000');
+  assert.deepEqual(buildQuery({ sort: 'nummer' }).sort, [{ [`${fields.identifier}.getal`]: { order: 'asc', missing: '_last' } }]);
 });
