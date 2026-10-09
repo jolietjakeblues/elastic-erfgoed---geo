@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildQuery, buildGebiedQuery, buildRelationQuery, gebiedClause, bucketsOf, search, ENDPOINT, BASE, fields, facets } from '../web/search.js';
-import { geometryFor } from '../web/geo.js';
+import { buildQuery, buildGebiedQuery, buildRelationQuery, lookupQuery, withinClause, nearClause, ligtInQuery, bucketsOf, search, ENDPOINT, BASE, fields, facets } from '../web/search.js';
+import { geometryFor, WKT_FIELD } from '../web/geo.js';
 const timeout = () => AbortSignal.timeout(30000);
 const preflight = await fetch(ENDPOINT, { method: 'OPTIONS', headers: { Origin: 'http://127.0.0.1:4174', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
 assert.ok(preflight.ok);
@@ -18,14 +18,24 @@ for (const key of Object.keys(facets)) assert.ok(buckets(all, key).length, `Face
 const werelderfgoed = await search(buildQuery({ filters: { soort: ['werelderfgoed'] } }), timeout());
 assert.equal(werelderfgoed.hits.total.value, perSoort.werelderfgoed);
 assert.ok(werelderfgoed.hits.hits.every(hit => hit._id.startsWith(`${BASE}werelderfgoed/`)));
-// Binnen een gebied: aantal = rijksmonumenten + complexen uit de ruimtelijke koppeling.
+// Binnen een gebied: ruimtelijk in Elasticsearch (geo_shape within), vergelijkbaar met de vooraf berekende koppeling.
+const context = async (soort, nummer) => { const source = (await search(lookupQuery(soort, nummer), timeout())).hits.hits[0]._source; return { source, clause: withinClause(source[WKT_FIELD][0], source['@id']) }; };
 const orvelte = gebieden.find(g => g.soort === 'gezicht' && g.nummer === '1325');
-const inOrvelte = await search(buildQuery({ binnen: 'gezicht:1325' }, { clause: gebiedClause(orvelte) }), timeout());
+const inOrvelte = await search(buildQuery({ binnen: 'gezicht:1325', filters: { soort: ['rijksmonument', 'complex'] } }, await context('gezicht', '1325')), timeout());
 assert.equal(inOrvelte.hits.total.value, orvelte.rijksmonument.length + orvelte.complex.length);
-assert.equal(count(inOrvelte, 'soort', 'rijksmonument'), orvelte.rijksmonument.length);
-const amsterdam = gebieden.find(g => g.soort === 'gezicht' && g.nummer === '1477');
-const pakhuis = await search(buildQuery({ query: 'pakhuis', binnen: 'gezicht:1477' }, { clause: gebiedClause(amsterdam) }), timeout());
-assert.ok(pakhuis.hits.total.value > 0 && pakhuis.hits.total.value < amsterdam.rijksmonument.length);
+const pakhuis = await search(buildQuery({ query: 'pakhuis', binnen: 'gezicht:1477' }, await context('gezicht', '1477')), timeout());
+assert.ok(pakhuis.hits.total.value > 100);
+// In de buurt: 500 m rond een rijksmonument, het monument zelf niet meegeteld.
+const dom = (await search(lookupQuery('rijksmonument', '36075'), timeout())).hits.hits[0]._source;
+const near = await search(buildQuery({ binnen: 'rond:rijksmonument:36075:500' }, { clause: nearClause(geometryFor(dom).point, 500, dom['@id']) }), timeout());
+assert.ok(near.hits.total.value > 100 && near.hits.hits.every(hit => hit._id !== dom['@id']));
+// Ligt in: per object de gebieden die het bevatten.
+const sample = inOrvelte.hits.hits.slice(0, 3).map(hit => ({ name: hit._id, wkt: hit._source[WKT_FIELD][0] }));
+const ligtIn = await search(ligtInQuery(sample), timeout());
+assert.ok(ligtIn.hits.hits.some(hit => hit._source[fields.name][0] === 'Orvelte' && hit.matched_queries.length === 3));
+// Sorteren op nummer als getal.
+const lowest = await search(buildQuery({ filters: { soort: ['rijksmonument'] }, sort: 'nummer' }), timeout());
+assert.equal(lowest.hits.hits[0]._source[fields.identifier][0], '1');
 // Telling per gebied voor één zoekvraag.
 const molens = await search(buildGebiedQuery({ query: 'molen', filters: { soort: ['rijksmonument'] } }, null, gebieden), timeout());
 const top = Object.entries(molens.aggregations.gebieden.buckets).sort((a, b) => b[1].doc_count - a[1].doc_count).slice(0, 3);
@@ -37,7 +47,7 @@ const relations = await search(buildRelationQuery([], [part]), timeout());
 assert.ok(relations.hits.hits.some(hit => hit._id === complex['@id']));
 const geometries = all.hits.hits.map(hit => geometryFor(hit._source)?.kind ?? 'geen');
 console.log(JSON.stringify({
-  cors: 'OK', totaal: all.hits.total.value, perSoort, orvelte: inOrvelte.hits.total.value, pakhuisInAmsterdam: pakhuis.hits.total.value,
+  cors: 'OK', totaal: all.hits.total.value, perSoort, orvelte: inOrvelte.hits.total.value, pakhuisInAmsterdam: pakhuis.hits.total.value, binnen500mDomplein: near.hits.total.value,
   molensPerGebied: top.map(([key, bucket]) => `${gebieden.find(g => `${g.soort}:${g.nummer}` === key).naam}: ${bucket.doc_count}`),
   complexMetOnderdeel: complex[fields.name]?.[0], geometrie: Object.fromEntries(['punt', 'vlak', 'geen'].map(kind => [kind, geometries.filter(k => k === kind).length]))
 }, null, 2));

@@ -2,7 +2,7 @@
 
 > **Dit is een demo.** Bouw hier geen applicaties of andere afhankelijkheden op. De scripts, index en service kunnen zonder aankondiging wijzigen of verdwijnen.
 
-Een webdemo die laat zien wat Elasticsearch bovenop de SDO/Linked Data-publicatie van de RCE-dataset `erfgoed-sdo` mogelijk maakt. In één index staan rijksmonumenten, complexen, archeologische terreinen, beschermde stads- en dorpsgezichten en werelderfgoed. De demo kan fulltext en Booleaans zoeken, facetten tonen (ook per soort), relaties volgen en tonen wat er **in een gezicht, werelderfgoed of complex** ligt. Er is een kaart en elk resultaat linkt naar Linked Data en het register.
+Een webdemo die laat zien wat Elasticsearch bovenop de SDO/Linked Data-publicatie van de RCE-dataset `erfgoed-sdo` mogelijk maakt. In één index staan rijksmonumenten, complexen, archeologische terreinen, beschermde stads- en dorpsgezichten en werelderfgoed. De demo kan fulltext en Booleaans zoeken, facetten tonen (ook per soort), relaties volgen, en **ruimtelijk zoeken**: wat ligt er in een gezicht of werelderfgoed, en wat ligt er in de buurt van een monument. Er is een kaart en elk resultaat linkt naar Linked Data en het register.
 
 Opvolger van de [Rijksmonumenten-demo](https://rijksmonumenten-sdo-elastic-demo.jolietjakeblues64.workers.dev/) ([repo](https://github.com/jolietjakeblues/elastic)). Zoeksyntax, facetlogica, deelbare URL, CSV-export, huisstijl en begrenzing werken hetzelfde. Hieronder staat vooral wat er anders is.
 
@@ -12,14 +12,18 @@ Voorbeelden (achter de URL van de demo plakken):
 - Rijksmonumenten in werelderfgoed Kinderdijk: `?binnen=werelderfgoed:818&soort=rijksmonument`
 - pakhuis in de Amsterdamse Grachtengordel: `?q=pakhuis&binnen=werelderfgoed:1349`
 - de onderdelen van complex Buitenplaats Eemwijk: `?binnen=complex:524444`
+- rijksmonumenten binnen 500 m van rijksmonument 36075 (Domplein, Utrecht): `?binnen=rond:rijksmonument:36075:500&soort=rijksmonument`
+- forten in de Hollandse Waterlinies, op nummer: `?q=fort&binnen=werelderfgoed:759&sorteer=nummer`
 
 ## Services
 
 ```text
-POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo/_search
+POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-geo/_search
 ```
 
-De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). De SPARQL-endpoint (`…/erfgoed-sdo/sparql`) wordt door de demo niet gebruikt (zie *Ruimtelijke koppeling*).
+De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). Er wordt geen SPARQL gebruikt.
+
+De demo gebruikt de service **`Erfgoed-sdo-geo`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template (zie *Ruimtelijk zoeken*).
 
 ## Inhoud van de index (oktober 2026)
 
@@ -46,14 +50,19 @@ Een `filters`-aggregation met per soort een `prefix`-query op `@id.keyword`. Het
 ], "minimum_should_match": 1 } }
 ```
 
-### Binnen een gezicht, werelderfgoed of complex
+### Binnen een gezicht, werelderfgoed of complex, of in de buurt
 
-Met het veld **Binnen gezicht of werelderfgoed** (of de knoppen bij een resultaat) wordt een *context* gekozen. Die komt als `filter` in de `query` en beperkt dus ook alle facetten. De zoekvraag werkt gewoon binnen die context. URL-parameter: `binnen=gezicht:1325`, `binnen=werelderfgoed:818` of `binnen=complex:524444`.
+Met het veld **Binnen gezicht of werelderfgoed**, of met de knoppen bij een resultaat, wordt een *context* gekozen. Die komt als `filter` in de `query` en beperkt dus ook alle facetten. De zoekvraag werkt binnen die context.
 
-- **Complex:** het complex wordt opgezocht en de URI's uit `schema:hasPart` gaan als `terms` op `@id.keyword` in de query.
-- **Gezicht en werelderfgoed:** de nummers uit de ruimtelijke koppeling (zie hieronder) gaan als `terms` op `identifier.keyword`, per soort gecombineerd met het URI-voorvoegsel, want nummers zijn alleen per soort uniek. Voor de binnenstad van Amsterdam zijn dat 6.651 nummers (53 kB request, ca. 0,2 s).
+| Context | URL-parameter | Elasticsearch |
+|---|---|---|
+| Gezicht of werelderfgoed | `binnen=gezicht:1325`, `binnen=werelderfgoed:818` | `geo_shape` met het vlak van het gebied, `relation: within` (helemaal binnen het vlak), zonder het gebied zelf |
+| Complex | `binnen=complex:524444` | `terms` op `@id.keyword` met de URI's uit `schema:hasPart` |
+| In de buurt | `binnen=rond:rijksmonument:36075:500` (100, 250, 500, 1000 of 2000 m) | `geo_distance` vanaf het (zwaarte)punt van het object, zonder het object zelf |
 
-Het gekozen gebied of complex wordt op de kaart als zwarte stippellijn getekend.
+Het vlak van het gebied gaat in de query mee, want `indexed_shape` werkt hier niet (zie *Ruimtelijk zoeken*). De mediaan is 3 kB per gebied. De grootste zijn de Hollandse Waterlinies (850 kB, ca. 0,4 s) en de Waddenzee (210 kB).
+
+Op de kaart staat het gekozen gebied of complex, of de cirkel, als zwarte stippellijn.
 
 ### Relaties bij elk resultaat
 
@@ -63,40 +72,65 @@ Het gekozen gebied of complex wordt op de kaart als zwarte stippellijn getekend.
 | Rijksmonument | *Archeologische terreinen* | `containsPlace` |
 | Archeologisch terrein | *Ligt in* rijksmonument | `containedInPlace` |
 | Complex | *Onderdelen* + knop **Toon onderdelen** | `hasPart` |
-| Rijksmonument, complex | *Ligt in* gezicht/werelderfgoed | ruimtelijke koppeling |
-| Gezicht, werelderfgoed | *Hierin liggen* + knop **Toon wat erin ligt** | ruimtelijke koppeling |
+| Rijksmonument, complex | *Ligt in* gezicht/werelderfgoed | `geo_shape` met `relation: contains`, zie hieronder |
+| Gezicht, werelderfgoed | knop **Toon wat erin ligt** | context `geo_shape within` |
+| Rijksmonument, complex | knop **In de buurt** | context `geo_distance`, 500 m |
 
 Namen en nummers van gerelateerde objecten komen voor de hele pagina uit **één** extra request (`terms` op `@id.keyword` en op `hasPart.keyword`).
 
+*Ligt in* is ook één request voor de hele pagina. Per rijksmonument of complex is er een benoemde query (`_name`) die zoekt naar gezichten en werelderfgoed waarvan het vlak dat object bevat. Elasticsearch geeft bij elk gevonden gebied in `matched_queries` terug bij welke objecten het hoort:
+
+```json
+{ "bool": {
+  "filter": [ /* soort gezicht of werelderfgoed */ ],
+  "should": [ { "geo_shape": { "http://www opengis net/ont/geosparql#asWKT": { "shape": "Polygon ((…))", "relation": "contains" }, "_name": "<URI van het monument>" } } ],
+  "minimum_should_match": 1 } }
+```
+
 ### Blok "In gezicht of werelderfgoed"
 
-Telt voor de huidige zoekactie hoeveel resultaten in elk gezicht of werelderfgoed liggen, bijvoorbeeld in welke gebieden de meeste molens staan (`?q=molen&soort=rijksmonument`, blok openklappen). Dit is één `filters`-aggregation met een bucket per gebied. De request is ca. 0,5 MB (alle nummers van alle gebieden) en duurt ca. 0,7 s. Daarom wordt er alleen geteld als het blok openstaat. Klikken op een gebied zoekt binnen dat gebied, met dezelfde zoekvraag.
+Telt voor de huidige zoekactie hoeveel resultaten in elk gezicht of werelderfgoed liggen, bijvoorbeeld in welke gebieden de meeste molens staan (`?q=molen&soort=rijksmonument`, blok openklappen). Dit is één `filters`-aggregation met een bucket per gebied. Dit onderdeel gebruikt nog de **vooraf berekende koppeling** (zie hieronder): met de vlakken zelf zou de request ca. 5 MB zijn, met de nummers 0,5 MB (ca. 0,7 s). Daarom wordt er ook alleen geteld als het blok openstaat. De aantallen kunnen iets afwijken van *binnen*-zoeken. Klikken op een gebied zoekt binnen dat gebied, met dezelfde zoekvraag.
 
 ### Overig
 
 - Standaard wordt in **Alles** gezocht, omdat gezichten en werelderfgoed geen omschrijving hebben. Nieuw zoekveld: **Nummer**.
-- Nieuwe sortering **Soort** (op `@id.keyword`).
+- Nieuwe sorteringen **Soort** (op `@id.keyword`) en **Nummer** (op `identifier.getal`, een `long`-subveld uit de index template).
 - Resultaten hebben een gekleurd label per soort, ook op de kaart. Rijksmonumenten zonder naam krijgen type en adres als kop.
 - Registerlinks: Monumentenregister, Kennisbank RCE (gezichten) en UNESCO (werelderfgoed). Andere domeinen worden niet getoond.
 - CSV heeft extra kolommen **Soort** en **Ligt in gezicht/werelderfgoed**.
 
-## Ruimtelijke koppeling
+## Ruimtelijk zoeken
 
-De index heeft **geen** relatie tussen een monument en het gezicht of werelderfgoed waarin het ligt. Ook de CEO-ontologie kent zo'n property niet. Ruimtelijk zoeken kan niet in deze service:
+De standaardservice `Erfgoed-sdo` kan niet ruimtelijk zoeken. Daar is `geo:asWKT` als `text` geïndexeerd, en het veld `geoShape` bestaat wel als geo-veld maar is bij 0 documenten gevuld. Er is ook geen relatie tussen een monument en het gezicht of werelderfgoed waarin het ligt; de CEO-ontologie kent zo'n property niet.
 
-- `geo:asWKT` is als `text` geïndexeerd; `geo_shape`- en `geo_bounding_box`-queries geven een fout;
-- het veld `geoShape` bestaat wel als geo-veld, maar is bij **0** documenten gevuld;
-- de SPARQL-endpoint kent `geof:sfIntersects` niet ("Unknown function").
+Daarom is er een tweede service, **`Erfgoed-sdo-geo`**, aangemaakt met een index template (`triply/elastic-service-geo.json`), volgens de [TriplyDB-documentatie](https://docs.triply.cc/triply-api/#setting-up-index-templates):
 
-Daarom berekent `scripts/build_gebieden.py` de koppeling vooraf en schrijft die naar `web/data/gebieden.json` (437 kB, gzip veel kleiner). Een rijksmonument of complex ligt in een gebied als:
+- `geo:asWKT` wordt een `geo_shape` (met `ignore_malformed`);
+- `identifier` krijgt een subveld `getal` van het type `long`, zodat sorteren op nummer kan.
 
-1. een punt op zijn geometrie (`point_on_surface`) binnen het vlak van het gebied valt, **of**
-2. minstens een kwart van zijn vlak het gebied overlapt, **of**
-3. het gebied voor minstens de helft binnen zijn vlak valt (nodig voor kleine werelderfgoederen als het Eisinga Planetarium, waarvan het vlak kleiner is dan het monumentperceel).
+Aanmaken gebeurt met een token met *Management access*; een leestoken geeft `Unauthorized`. In PowerShell:
 
-Resultaat bij het bouwen: 36.534 rijksmonumenten liggen in minstens één gebied, bijv. Orvelte 20 rijksmonumenten + 1 complex, Molens bij Kinderdijk-Elshout 22, Grachtengordel 3.341 + 16.
+```bash
+curl.exe -H "Authorization: Bearer $env:TRIPLY_TOKEN" -H "Content-Type: application/json" -X POST "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services" -d "@triply/elastic-service-geo.json"
+```
 
-Opnieuw berekenen (na een nieuwe versie van de index):
+Templates worden alleen bij het aanmaken gelezen. Een wijziging betekent: service opnieuw aanmaken.
+
+Controle met `node tests/geo-service.mjs` (9 oktober 2026):
+
+| Controle | Resultaat |
+|---|---|
+| Documenten met geo_shape | 66.254 van 68.078 (alles behalve 1.806 archeologische terreinen en 18 objecten zonder bruikbare WKT) |
+| Orvelte / Kinderdijk / Grachtengordel, `within` | 21 / 22 / 3.357, gelijk aan de vooraf berekende koppeling |
+| Zelfde, `intersects` | 22 / 22 / 3.358 |
+| Binnen 500 m van de Domtoren | 799 |
+| Sorteren op `identifier.getal` | 1, 2, 3, 4, 5 |
+
+**Niet gelukt:** `indexed_shape`, waarbij je met het document-id naar het vlak van een gezicht verwijst. Dat geeft *shape must be an object consisting of type and coordinates*, omdat de WKT in `_source` als lijst staat. Daarom gaat het vlak zelf mee in de query.
+
+### Vooraf berekende koppeling (alleen nog voor de telling per gebied)
+
+`scripts/build_gebieden.py` (Python + shapely) berekent welke rijksmonumenten en complexen in welk gebied liggen en schrijft dat naar `web/data/gebieden.json` (437 kB). Dit is nodig voor het blok *In gezicht of werelderfgoed* en de CSV-kolom *Ligt in*. Regel: een punt op het object ligt in het vlak, of minstens een kwart van het object overlapt, of het gebied ligt voor de helft in het object. Opnieuw bouwen na een nieuwe versie van de index:
 
 ```bash
 pip install shapely
@@ -105,8 +139,6 @@ pip install shapely
 ```bash
 npm run gebieden
 ```
-
-**Aanbeveling voor de index:** als Triply het veld `geoShape` vult (de mapping is er al), kan dit zonder vooraf berekende lijst, met een `geo_shape`-query met `indexed_shape` die naar het document van het gezicht verwijst. Dan is de koppeling altijd actueel en zijn ook vragen als "wat ligt binnen 500 m" mogelijk.
 
 ## Lokaal starten
 
@@ -126,7 +158,7 @@ npm test
 npm run test:live
 ```
 
-`npm test` test queryopbouw, soort- en contextfilters, URL, uitleg en CSV zonder netwerk. `npm run test:live` test tegen de echte service: CORS, de soort-facet (som = totaal), het soortfilter, "binnen Orvelte" (aantal = koppeling), zoeken binnen de Amsterdamse binnenstad, de telling per gebied en de relatie complex ↔ onderdeel.
+`npm test` test queryopbouw, soort-, gebied- en afstandsfilters, URL, uitleg en CSV zonder netwerk. `npm run test:live` test tegen de echte service: CORS, de soort-facet (som = totaal), het soortfilter, "binnen Orvelte" met `geo_shape` (aantal = koppeling), zoeken binnen de Amsterdamse binnenstad, 500 m rond een monument, *ligt in* met benoemde queries, sorteren op nummer, de telling per gebied en de relatie complex ↔ onderdeel. `node tests/geo-service.mjs` controleert de geo-service zelf.
 
 ## Deployment
 
@@ -144,13 +176,15 @@ npx wrangler deploy
 | `web/app.js` | Interface: resultaten met relaties, facetten, gebiedskeuze, context, kaart, export |
 | `web/geo.js` | WKT naar kaartcoördinaten (ongewijzigd) |
 | `web/style.css` | RCE-huisstijl, plus kleuren per soort |
-| `web/data/gebieden.json` | Vooraf berekende ruimtelijke koppeling |
+| `triply/elastic-service-geo.json` | Config van de Elasticsearch-service met geo-mapping |
+| `web/data/gebieden.json` | Vooraf berekende koppeling, alleen voor de telling per gebied en de CSV |
 | `scripts/build_gebieden.py` | Bouwt `gebieden.json` |
+| `tests/geo-service.mjs` | Controle van de geo-service |
 
 ## Bekende beperkingen
 
-- De koppeling met gezichten en werelderfgoed is berekend, niet uit het register. Aan de randen van een gebied kan het afwijken van de officiële aanwijzing.
-- Na een nieuwe versie van de index moet `gebieden.json` opnieuw gebouwd worden.
+- *Binnen een gebied* betekent: helemaal binnen het vlak (`within`). Een monument dat over de grens ligt telt niet mee. Of dat overeenkomt met de juridische aanwijzing moet de RCE beoordelen.
+- De telling per gebied en de CSV-kolom *Ligt in* gebruiken nog de vooraf berekende koppeling. Na een nieuwe versie van de index moet `gebieden.json` opnieuw gebouwd worden.
+- Bij de Hollandse Waterlinies gaat er 850 kB vlak mee in elke zoekactie.
 - Archeologische terreinen hebben geen geometrie en staan dus niet op de kaart. Ze zijn wel te vinden via het rijksmonument waarin ze liggen.
 - De kaart toont alleen de resultaten van de huidige pagina (25).
-- Sorteren op nummer kan niet (nummer is tekst in de index, scripts zijn uitgeschakeld).

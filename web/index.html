@@ -24,7 +24,7 @@
       <div class="actions"><button type="submit" class="primary">Zoek</button><button type="button" id="reset" title="Wis zoekvraag, filters en resultaten">Opnieuw beginnen</button></div>
       <div class="binnen-input"><label for="binnen">Binnen gezicht of werelderfgoed <span class="optional">(optioneel)</span></label>
         <div class="binnen-row"><input id="binnen" type="search" list="gebieden-lijst" autocomplete="off" placeholder="Typ een naam, bijvoorbeeld Orvelte of Kinderdijk" aria-describedby="binnen-hint"><datalist id="gebieden-lijst"></datalist></div>
-        <p id="binnen-hint" class="hint">Kies een van de 472 beschermde gezichten of 12 werelderfgoederen. Zoeken binnen een complex kan via de knop bij een complex.</p></div>
+        <p id="binnen-hint" class="hint">Kies een van de 472 beschermde gezichten of 12 werelderfgoederen; Elasticsearch zoekt dan ruimtelijk binnen het vlak. Bij een monument of complex staan ook de knoppen <strong>In de buurt</strong> en <strong>Toon onderdelen</strong>.</p></div>
       <p id="syntax" class="hint">Combineer met AND, OR, NOT (in hoofdletters) en haakjes. Gebruik quotes voor een exacte woordcombinatie. <button type="button" id="help-open" class="link-button">Zoekhulp en meer voorbeelden</button></p>
       <p id="query-tip" class="tip" hidden></p>
       <div class="examples"><span>Probeer:</span>
@@ -33,7 +33,7 @@
         <button type="button" data-example="pakhuis" data-binnen="werelderfgoed:1349">pakhuis in de Grachtengordel</button>
         <button type="button" data-example="" data-soort="werelderfgoed">Al het werelderfgoed</button>
         <button type="button" data-example="buitenplaats" data-soort="complex">Complexen: buitenplaats</button>
-        <button type="button" data-example="grafheuvel">grafheuvel</button>
+        <button type="button" data-example="" data-binnen="rond:rijksmonument:36075:500" data-soort="rijksmonument">Rijksmonumenten binnen 500 m van het Domplein</button>
       </div>
     </form>
   </div></div>
@@ -46,14 +46,14 @@
     <div class="workspace" id="workspace" data-view="list">
       <aside aria-label="Filters"><h2>Filters en facetten</h2><p class="hint">Vink meerdere waarden aan: binnen een filter geldt <em>of</em>, tussen filters <em>en</em>.</p>
         <div id="facets"><p class="muted">Na het zoeken verschijnen hier de beschikbare filters.</p></div>
-        <details id="gebied-facet"><summary>In gezicht of werelderfgoed</summary><p class="hint">Hoeveel resultaten liggen in elk gezicht of werelderfgoed? Wordt geteld als dit blok open is.</p><div id="gebied-counts"></div></details>
+        <details id="gebied-facet"><summary>In gezicht of werelderfgoed</summary><p class="hint">Hoeveel resultaten liggen in elk gezicht of werelderfgoed? Wordt geteld als dit blok open is, met een vooraf berekende koppeling.</p><div id="gebied-counts"></div></details>
       </aside>
       <section id="results-panel" aria-labelledby="results-heading"><div class="results-title"><h2 id="results-heading">Resultaten</h2><span id="page-info"></span></div>
         <div class="toolbar"><label for="sort">Sorteer op</label><select id="sort"></select><button type="button" id="share">Kopieer link</button><button type="button" id="export" disabled>Download CSV</button></div>
         <p id="export-info" class="hint" aria-live="polite"></p>
         <div id="active-filters"></div><div id="results"><p class="empty">Zoek op woorden, een naam of een adres, of kies een gebied.</p></div><nav id="pagination" aria-label="Resultaatpagina’s" hidden><button id="previous" type="button">Vorige</button><span id="page-number"></span><button id="next" type="button">Volgende</button></nav></section>
       <section id="map-panel" aria-labelledby="map-heading"><div class="results-title"><h2 id="map-heading">Kaart</h2></div><div id="map" role="region" aria-label="Kaart met zoekresultaten"></div>
-        <ul class="legend" aria-label="Legenda"><li data-soort="rijksmonument">Rijksmonument</li><li data-soort="complex">Complex</li><li data-soort="gezicht">Beschermd gezicht</li><li data-soort="werelderfgoed">Werelderfgoed</li><li data-soort="binnen">Gekozen gebied of complex</li></ul>
+        <ul class="legend" aria-label="Legenda"><li data-soort="rijksmonument">Rijksmonument</li><li data-soort="complex">Complex</li><li data-soort="gezicht">Beschermd gezicht</li><li data-soort="werelderfgoed">Werelderfgoed</li><li data-soort="binnen">Gekozen gebied, complex of afstand</li></ul>
         <p id="map-info" class="hint">Na het zoeken verschijnen de resultaten van deze pagina met een locatie op de kaart.</p></section>
     </div>
     <details class="technical"><summary>Toon Elasticsearch-query</summary><h2>In gewone taal</h2><ul id="query-explain"><li>Er is nog geen zoekactie uitgevoerd.</li></ul><h2>JSON</h2><p>De request die naar de Elasticsearch-service is gestuurd. Lange lijsten met nummers (bij een gekozen gebied) zijn ingekort weergegeven.</p><pre id="query-json">Er is nog geen zoekactie uitgevoerd.</pre></details>
@@ -67,8 +67,8 @@
         <tr><td>Rijksmonument</td><td>ca. 63.000 monumenten, met adres, type en omschrijving</td><td>onderdeel van een complex; bevat archeologische terreinen</td></tr>
         <tr><td>Complex</td><td>ca. 2.700 complexen (buitenplaats, kloostercomplex, …)</td><td><code>schema:hasPart</code> naar de rijksmonumenten</td></tr>
         <tr><td>Archeologisch terrein</td><td>ca. 1.800 terreinen, zonder eigen geometrie</td><td><code>schema:containedInPlace</code> naar een rijksmonument</td></tr>
-        <tr><td>Beschermd gezicht</td><td>472 stads- en dorpsgezichten</td><td>alleen een vlak; wat erin ligt is ruimtelijk berekend</td></tr>
-        <tr><td>Werelderfgoed</td><td>12 werelderfgoederen</td><td>alleen een vlak; wat erin ligt is ruimtelijk berekend</td></tr>
+        <tr><td>Beschermd gezicht</td><td>472 stads- en dorpsgezichten</td><td>alleen een vlak; wat erin ligt zoekt Elasticsearch ruimtelijk</td></tr>
+        <tr><td>Werelderfgoed</td><td>12 werelderfgoederen</td><td>alleen een vlak; wat erin ligt zoekt Elasticsearch ruimtelijk</td></tr>
       </tbody>
     </table>
     <h3>Combineren</h3>
@@ -93,12 +93,14 @@
         <tr><td><code>~</code></td><td>vergelijkbare spelling (tikfouten)</td><td><button type="button" data-example="kasteeel~">kasteeel~</button></td></tr>
       </tbody>
     </table>
-    <h3>Binnen een gezicht, werelderfgoed of complex</h3>
+    <h3>Binnen een gezicht, werelderfgoed of complex, of in de buurt</h3>
     <ul>
       <li>Kies bij <strong>Binnen gezicht of werelderfgoed</strong> een gebied. De zoekvraag en filters gelden dan alleen voor wat in dat gebied ligt. Een lege zoekvraag toont alles in het gebied.</li>
       <li>Bij een complex staat de knop <strong>Toon onderdelen</strong>; bij een gezicht of werelderfgoed <strong>Toon wat erin ligt</strong>.</li>
+      <li>Bij een rijksmonument of complex zoekt <strong>In de buurt</strong> alles binnen 500 m; de afstand is daarna aan te passen (100 m tot 2 km).</li>
       <li>Het blok <strong>In gezicht of werelderfgoed</strong> links telt per gebied hoeveel resultaten erin liggen, bijvoorbeeld in welke gezichten de meeste molens staan.</li>
-      <li>De index kent geen relatie tussen een monument en een gezicht. Die is vooraf ruimtelijk berekend: een monument ligt in een gebied als een punt op het monument binnen het vlak van het gebied valt, of als minstens een kwart van het monument het gebied overlapt.</li>
+      <li>De index kent geen relatie tussen een monument en een gezicht. Elasticsearch zoekt dat ruimtelijk: alles wat <em>helemaal</em> binnen het vlak valt (<code>geo_shape</code>, <code>within</code>). Een monument dat over de grens ligt telt dus niet mee.</li>
+      <li>De telling per gebied links gebruikt nog een vooraf berekende koppeling en kan daardoor iets afwijken.</li>
     </ul>
     <h3>Goed om te weten</h3>
     <ul>

@@ -1,5 +1,5 @@
-import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, lookupQuery, documentQuery, gebiedClause, partsClause, bucketsOf, search, facets, fields, sorts, soorten, soortVan, values, textValue, safeUrl, registerLink, toParams, fromParams, describe, toCsv, DEFAULT_FIELD, PAGE_SIZE, MAX_WINDOW, EXPORT_MAX } from './search.js';
-import { geometryFor } from './geo.js';
+import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, lookupQuery, partsClause, withinClause, nearClause, gebiedenListQuery, ligtInQuery, AFSTANDEN, bucketsOf, search, facets, fields, sorts, soorten, soortVan, values, textValue, safeUrl, registerLink, toParams, fromParams, describe, toCsv, DEFAULT_FIELD, PAGE_SIZE, MAX_WINDOW, EXPORT_MAX } from './search.js';
+import { geometryFor, WKT_FIELD } from './geo.js';
 const $ = id => document.getElementById(id);
 const blank = () => ({ query: '', field: DEFAULT_FIELD, filters: {}, page: 0, sort: 'relevantie', binnen: null, jokers: state?.jokers ?? false });
 let state; state = blank();
@@ -23,43 +23,55 @@ function el(tag, text, className) { const node = document.createElement(tag); if
 function button(text, callback, className) { const node = el('button', text, className); node.type = 'button'; node.addEventListener('click', callback); return node; }
 function link(text, url) { const node = el('a', text); node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer'; return node; }
 
-// Ruimtelijke koppeling gezicht/werelderfgoed → rijksmonumenten en complexen (zie scripts/build_gebieden.py).
-const gebieden = { list: [], byKey: new Map(), byLabel: new Map(), in: { rijksmonument: new Map(), complex: new Map() } };
+// Gezichten en werelderfgoed voor de keuzelijst, uit Elasticsearch (zonder vlakken).
+const gebieden = { list: [], byKey: new Map(), byLabel: new Map() };
 const gebiedLabel = g => `${decode(g.naam ?? 'Zonder naam')} — ${soorten[g.soort]} ${g.nummer}`;
-const gebiedenLoaded = fetch('data/gebieden.json').then(response => { if (!response.ok) throw new Error(response.status); return response.json(); }).then(data => {
-  gebieden.list = data.gebieden;
-  for (const g of data.gebieden) {
+const gebiedenLoaded = search(gebiedenListQuery(), AbortSignal.timeout(20000)).then(data => {
+  for (const { _source: source } of data.hits.hits) {
+    const g = { soort: soortVan(source['@id']), nummer: values(source[fields.identifier])[0], naam: values(source[fields.name])[0], id: source['@id'] };
+    if (!g.nummer) continue;
     const key = `${g.soort}:${g.nummer}`;
-    gebieden.byKey.set(key, g); gebieden.byLabel.set(gebiedLabel(g), key);
-    for (const soort of ['rijksmonument', 'complex']) for (const nummer of g[soort]) { const list = gebieden.in[soort].get(nummer) ?? []; list.push(g); gebieden.in[soort].set(nummer, list); }
+    gebieden.list.push(g); gebieden.byKey.set(key, g); gebieden.byLabel.set(gebiedLabel(g), key);
     $('gebieden-lijst').append(Object.assign(el('option'), { value: gebiedLabel(g) }));
   }
-  $('gebieden-info').textContent = `Ruimtelijke koppeling met gezichten en werelderfgoed berekend op ${data.bijgewerkt}.`;
-}).catch(error => { console.error('gebieden.json', error); $('binnen').disabled = true; $('binnen-hint').textContent = 'De gebiedenlijst kon niet worden geladen; zoeken binnen een gezicht of werelderfgoed werkt nu niet.'; });
-const gebiedenVan = source => {
-  const soort = soortVan(source['@id']);
-  return gebieden.in[soort]?.get(values(source[fields.identifier])[0]) ?? [];
-};
+}).catch(error => { console.error('Gebiedenlijst', error); $('binnen-hint').textContent = 'De lijst met gezichten en werelderfgoed kon niet worden geladen.'; });
+// Vooraf berekende koppeling (data/gebieden.json, scripts/build_gebieden.py): alleen nog voor de telling per gebied
+// en de CSV-kolom "Ligt in". Pas geladen als dat nodig is.
+let koppelingLoaded;
+const koppeling = () => (koppelingLoaded ??= fetch('data/gebieden.json').then(response => { if (!response.ok) throw new Error(response.status); return response.json(); }).then(data => {
+  const index = { list: data.gebieden, byKey: new Map(), in: { rijksmonument: new Map(), complex: new Map() } };
+  for (const g of data.gebieden) {
+    index.byKey.set(`${g.soort}:${g.nummer}`, g);
+    for (const soort of ['rijksmonument', 'complex']) for (const nummer of g[soort]) { const list = index.in[soort].get(nummer) ?? []; list.push(g); index.in[soort].set(nummer, list); }
+  }
+  return index;
+}));
+const gebiedenVan = (index, source) => index.in[soortVan(source['@id'])]?.get(values(source[fields.identifier])[0]) ?? [];
 
 // Context "binnen": een gezicht, werelderfgoed of complex. Wordt opgezocht en bewaard.
 const contexts = new Map();
 async function resolveContext(binnen) {
   if (!binnen) return null;
   if (contexts.has(binnen)) return contexts.get(binnen);
-  const [soort, nummer] = binnen.split(':');
+  const bits = binnen.split(':');
+  const [soort, nummer] = bits[0] === 'rond' ? bits.slice(1, 3) : bits;
+  const hit = (await search(lookupQuery(soort, nummer), AbortSignal.timeout(20000))).hits.hits[0];
+  if (!hit) throw new Error(`${soorten[soort]} ${nummer} bestaat niet in deze index.`);
+  const source = hit._source, uri = source['@id'], naam = show(source[fields.name]), geometry = geometryFor(source);
   let context;
-  if (soort === 'complex') {
-    const hit = (await search(lookupQuery('complex', nummer), AbortSignal.timeout(20000))).hits.hits[0];
-    if (!hit) throw new Error(`Complex ${nummer} bestaat niet in deze index.`);
-    const parts = values(hit._source[fields.hasPart]);
-    context = { soort, nummer, uri: hit._source['@id'], clause: partsClause(parts), label: `complex “${show(hit._source[fields.name]) || 'zonder naam'}” (${nummer})`, summary: `${plural(parts.length, 'onderdeel', 'onderdelen')} volgens schema:hasPart`, geometry: geometryFor(hit._source) };
+  if (bits[0] === 'rond') {
+    // Alles wat (deels) binnen een cirkel rond het (zwaarte)punt van het object valt: geo_distance op het geo_shape-veld.
+    if (!geometry) throw new Error(`${soorten[soort]} ${nummer} heeft geen locatie.`);
+    const meters = Number(bits[3]);
+    context = { soort, nummer, uri, meters, clause: nearClause(geometry.point, meters, uri), label: `${format(meters)} m rond ${soorten[soort].toLowerCase()} ${nummer}${naam ? ` “${naam}”` : ''}`, summary: 'alles wat (deels) binnen deze afstand van het punt van het object ligt (geo_distance)', geometry, circle: { point: geometry.point, meters } };
+  } else if (soort === 'complex') {
+    const parts = values(source[fields.hasPart]);
+    context = { soort, nummer, uri, clause: partsClause(parts), label: `complex “${naam || 'zonder naam'}” (${nummer})`, summary: `${plural(parts.length, 'onderdeel', 'onderdelen')} volgens schema:hasPart`, geometry };
   } else {
-    await gebiedenLoaded;
-    const g = gebieden.byKey.get(binnen);
-    if (!g) throw new Error(`${soorten[soort]} ${nummer} staat niet in de gebiedenlijst.`);
-    context = { soort, nummer, uri: g.id, clause: gebiedClause(g), label: `${soorten[soort].toLowerCase()} “${decode(g.naam)}” (${nummer})`, summary: `${plural(g.rijksmonument.length, 'rijksmonument', 'rijksmonumenten')} en ${plural(g.complex.length, 'complex', 'complexen')} volgens de ruimtelijke koppeling`, geometry: null };
-    // Het vlak van het gebied komt uit Elasticsearch; de kaart tekent het zodra het binnen is.
-    context.geometryLoaded = search(documentQuery(g.id), AbortSignal.timeout(20000)).then(data => { context.geometry = geometryFor(data.hits.hits[0]?._source); }).catch(error => console.error(error));
+    // Ruimtelijk: alles wat helemaal binnen het vlak van het gezicht of werelderfgoed valt (geo_shape within).
+    const wkt = values(source[WKT_FIELD])[0];
+    if (!wkt) throw new Error(`${soorten[soort]} ${nummer} heeft geen vlak.`);
+    context = { soort, nummer, uri, clause: withinClause(wkt, uri), label: `${soorten[soort].toLowerCase()} “${naam || 'zonder naam'}” (${nummer})`, summary: 'alles wat helemaal binnen het vlak valt (geo_shape within)', geometry };
   }
   contexts.set(binnen, context);
   return context;
@@ -109,17 +121,12 @@ function renderResults(hits) {
     if (metadata.childElementCount) card.append(metadata);
     // Relaties: wat erin ligt, waar het in ligt, onderdelen.
     const relations = el('div', null, 'relations');
-    if (soort === 'gezicht' || soort === 'werelderfgoed') {
-      const g = gebieden.byKey.get(`${soort}:${nummer}`);
-      if (g) relations.append(relationRow('Hierin liggen:', [document.createTextNode(`${plural(g.rijksmonument.length, 'rijksmonument', 'rijksmonumenten')} en ${plural(g.complex.length, 'complex', 'complexen')} `), button('Toon wat erin ligt', () => openBinnen(`${soort}:${nummer}`), 'relation-button')]));
-    }
+    if (soort === 'gezicht' || soort === 'werelderfgoed') relations.append(relationRow('Gebied:', [button('Toon wat erin ligt', () => openBinnen(`${soort}:${nummer}`), 'relation-button')]));
     if (soort === 'complex') {
       const parts = values(source[fields.hasPart]);
       relations.append(relationRow('Onderdelen:', [document.createTextNode(`${plural(parts.length, 'rijksmonument', 'rijksmonumenten')} `), button('Toon onderdelen', () => openBinnen(`complex:${nummer}`), 'relation-button')]));
     }
-    const inGebied = gebiedenVan(source);
-    if (inGebied.length) relations.append(relationRow('Ligt in:', inGebied.map(g => button(`${soorten[g.soort]} ${decode(g.naam)}`, () => openBinnen(`${g.soort}:${g.nummer}`), 'relation-button'))));
-    // Deze komen uit een extra request (zie loadRelations).
+    // Deze komen uit extra requests (zie loadRelations en loadLigtIn).
     const slot = el('div'); relations.append(slot); relationSlots.set(hit._id, { slot, source, soort });
     card.append(relations);
     const fragments = Object.values(hit.highlight || {}).flat().slice(0, 3);
@@ -130,6 +137,7 @@ function renderResults(hits) {
     for (const raw of values(source['@id'])) { const url = safeUrl(raw); if (url) { links.append(link('Linked Data', url)); const uri = el('p', null, 'uri'); uri.append(link(raw, url)); card.append(uri); } }
     for (const raw of values(source[fields.sameAs])) { const register = registerLink(raw); if (register) links.append(link(register.label, register.url)); }
     if (map && geometryFor(source)) links.append(button('Toon op kaart', () => select(hit._id, true)));
+    if (geometryFor(source) && nummer && (soort === 'rijksmonument' || soort === 'complex')) links.append(button('In de buurt', () => openBinnen(`rond:${soort}:${nummer}:500`)));
     card.append(links); $('results').append(card);
   }
 }
@@ -167,6 +175,23 @@ async function loadRelations(hits, signal) {
     }
   }
 }
+// In welk gezicht of werelderfgoed ligt elk rijksmonument en complex op deze pagina? Eén request met per object een
+// benoemde geo_shape-query; matched_queries zegt welk gebied bij welk object hoort.
+async function loadLigtIn(hits, signal) {
+  const items = hits.filter(hit => ['rijksmonument', 'complex'].includes(soortVan(hit._source?.['@id']))).map(hit => ({ name: hit._id, wkt: values(hit._source[WKT_FIELD])[0] })).filter(item => item.wkt);
+  if (!items.length) return;
+  let data;
+  try { data = await search(ligtInQuery(items), signal); } catch (error) { if (error.name !== 'AbortError') console.error('Ligt in', error); return; }
+  const per = new Map();
+  for (const { _source: source, matched_queries: names = [] } of data.hits.hits) for (const name of names) per.set(name, [...(per.get(name) ?? []), source]);
+  for (const [id, list] of per) {
+    const entry = relationSlots.get(id); if (!entry) continue;
+    entry.slot.prepend(relationRow('Ligt in:', list.map(g => {
+      const soort = soortVan(g['@id']);
+      return button(`${soorten[soort]} ${show(g[fields.name])}`, () => openBinnen(`${soort}:${values(g[fields.identifier])[0]}`), 'relation-button');
+    })));
+  }
+}
 function markerIcon(number, soort, selected) {
   // Alleen het nummer als label, als tekst (geen HTML uit de bron).
   const label = el('span', number, selected ? 'selected' : null);
@@ -178,9 +203,10 @@ const shapeStyle = (soort, selected) => ({ color: selected ? '#000000' : colors[
 function renderContextGeometry(context) {
   if (!map) return;
   contextLayer.clearLayers();
-  if (!context?.geometry?.polygons) return;
-  // Het gekozen gebied of complex als zwarte stippellijn, zonder vulling, onder de resultaten.
-  contextLayer.addLayer(L.polygon(context.geometry.polygons, { color: '#000', weight: 2, dashArray: '6 6', fill: false, interactive: false }));
+  // Het gekozen gebied of complex, of de cirkel bij "in de buurt", als zwarte stippellijn zonder vulling.
+  const style = { color: '#000', weight: 2, dashArray: '6 6', fill: false, interactive: false };
+  if (context?.circle) contextLayer.addLayer(L.circle([context.circle.point.lat, context.circle.point.lon], { ...style, radius: context.circle.meters }));
+  else if (context?.geometry?.polygons) contextLayer.addLayer(L.polygon(context.geometry.polygons, style));
 }
 function renderMap(hits) {
   if (!map) return 0;
@@ -290,13 +316,13 @@ async function countGebieden(context) {
   gebiedController?.abort(); const current = new AbortController(); gebiedController = current;
   $('gebied-counts').replaceChildren(el('p', 'Tellen…', 'hint'));
   try {
-    await gebiedenLoaded;
-    const data = await search(buildGebiedQuery(state, context, gebieden.list), current.signal);
+    const index = await koppeling();
+    const data = await search(buildGebiedQuery(state, context, index.list), current.signal);
     if (gebiedController !== current) return;
     const buckets = Object.entries(data.aggregations.gebieden.buckets).filter(([, bucket]) => bucket.doc_count > 0).sort((a, b) => b[1].doc_count - a[1].doc_count);
     const list = el('ul', null, 'facet-list');
     for (const [key, bucket] of buckets.slice(0, 100)) {
-      const g = gebieden.byKey.get(key), item = el('li'), option = button('', () => setBinnen(key), 'facet-option gebied-option');
+      const g = index.byKey.get(key), item = el('li'), option = button('', () => setBinnen(key), 'facet-option gebied-option');
       const name = el('span', `${decode(g.naam)}`, 'facet-name'); name.dataset.soort = g.soort;
       option.append(name, el('span', format(bucket.doc_count), 'facet-count'));
       option.title = `${soorten[g.soort]} ${g.nummer}: toon alleen wat hierin ligt`;
@@ -332,8 +358,14 @@ function renderContext(context) {
   if (!context) return;
   const text = el('p'); text.append(el('strong', `Binnen ${context.label}`), document.createTextNode(`: ${context.summary}.`));
   const actions = el('div', null, 'links');
+  if (context.meters) {
+    const distance = el('select'); distance.setAttribute('aria-label', 'Afstand');
+    for (const meters of AFSTANDEN) { const option = el('option', `${format(meters)} m`); option.value = meters; option.selected = meters === context.meters; distance.append(option); }
+    distance.addEventListener('change', () => setBinnen(`rond:${context.soort}:${context.nummer}:${distance.value}`));
+    actions.append(distance);
+  }
   const url = safeUrl(context.uri); if (url) actions.append(link('Linked Data', url));
-  actions.append(button('Toon het gebied zelf', () => showObject(context.soort, context.nummer)), button('Niet meer binnen dit gebied zoeken', () => setBinnen(null)));
+  actions.append(button(`Toon ${soorten[context.soort].toLowerCase()} ${context.nummer} zelf`, () => showObject(context.soort, context.nummer)), button('Weer overal zoeken', () => setBinnen(null)));
   $('context').append(text, actions);
 }
 // JSON-weergave: lange nummerlijsten (gebied) inkorten, zodat de query leesbaar blijft.
@@ -352,7 +384,6 @@ async function run(urlMode = 'push') {
     const body = buildQuery(state, context);
     $('query-json').textContent = readable(body); explain(context); renderContext(context);
     renderContextGeometry(context);
-    context?.geometryLoaded?.then(() => { if (controller === current) { renderContextGeometry(context); needsFit = true; fitMarkers(); } });
     const data = await search(body, current.signal);
     if (controller !== current) return;
     const total = typeof data.hits.total === 'number' ? data.hits.total : data.hits.total.value;
@@ -361,7 +392,7 @@ async function run(urlMode = 'push') {
     await gebiedenLoaded;
     renderResults(hits); renderFilters(data.aggregations, context);
     const onMap = renderMap(hits);
-    loadRelations(hits, current.signal);
+    loadRelations(hits, current.signal); loadLigtIn(hits, current.signal);
     countGebieden(context);
     $('status').textContent = `Totaal gevonden: ${exact ? '' : 'minimaal '}${format(total)} | Getoond: ${hits.length}${map ? ` | Op kaart: ${onMap}` : ''}`;
     $('page-info').textContent = hits.length ? `${format(state.page * PAGE_SIZE + 1)} tot ${format(state.page * PAGE_SIZE + hits.length)}` : '';
@@ -442,8 +473,8 @@ $('share').addEventListener('click', async () => {
 $('export').addEventListener('click', async () => {
   $('export').disabled = true; $('export-info').textContent = 'Export wordt gemaakt…';
   try {
-    const data = await search(buildExportQuery(state, contexts.get(state.binnen)), AbortSignal.timeout(30000));
-    const blob = new Blob([toCsv(data.hits.hits, decode, source => gebiedenVan(source).map(g => `${soorten[g.soort]} ${g.naam}`))], { type: 'text/csv;charset=utf-8' });
+    const [data, index] = await Promise.all([search(buildExportQuery(state, contexts.get(state.binnen)), AbortSignal.timeout(30000)), koppeling().catch(() => null)]);
+    const blob = new Blob([toCsv(data.hits.hits, decode, source => (index ? gebiedenVan(index, source).map(g => `${soorten[g.soort]} ${g.naam}`) : []))], { type: 'text/csv;charset=utf-8' });
     const anchor = el('a'); anchor.href = URL.createObjectURL(blob); anchor.download = `erfgoed-${new Date().toISOString().slice(0, 10)}.csv`;
     anchor.click(); setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
     $('export-info').textContent = lastTotal > EXPORT_MAX ? `De export bevat de eerste ${format(EXPORT_MAX)} van ${format(lastTotal)} resultaten.` : `${format(data.hits.hits.length)} resultaten geëxporteerd.`;
