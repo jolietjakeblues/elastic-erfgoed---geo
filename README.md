@@ -6,14 +6,18 @@ Een webdemo die laat zien wat Elasticsearch bovenop de SDO/Linked Data-publicati
 
 Opvolger van de [Rijksmonumenten-demo](https://rijksmonumenten-sdo-elastic-demo.jolietjakeblues64.workers.dev/) ([repo](https://github.com/jolietjakeblues/elastic)). Zoeksyntax, facetlogica, deelbare URL, CSV-export, huisstijl en begrenzing werken hetzelfde. Hieronder staat vooral wat er anders is.
 
-Voorbeelden (achter de URL van de demo plakken):
+**Online:** <https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/>
 
-- Alles in beschermd gezicht Orvelte: `?binnen=gezicht:1325`
-- Rijksmonumenten in werelderfgoed Kinderdijk: `?binnen=werelderfgoed:818&soort=rijksmonument`
-- pakhuis in de Amsterdamse Grachtengordel: `?q=pakhuis&binnen=werelderfgoed:1349`
-- de onderdelen van complex Buitenplaats Eemwijk: `?binnen=complex:524444`
-- rijksmonumenten binnen 500 m van rijksmonument 36075 (Domplein, Utrecht): `?binnen=rond:rijksmonument:36075:500&soort=rijksmonument`
-- forten in de Hollandse Waterlinies, op nummer: `?q=fort&binnen=werelderfgoed:759&sorteer=nummer`
+Voorbeelden:
+
+- [Alles in beschermd gezicht Orvelte](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?binnen=gezicht:1325)
+- [Rijksmonumenten in werelderfgoed Kinderdijk](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?binnen=werelderfgoed:818&soort=rijksmonument)
+- [pakhuis in de Amsterdamse Grachtengordel](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?q=pakhuis&binnen=werelderfgoed:1349)
+- [De onderdelen van complex Buitenplaats Eemwijk](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?binnen=complex:524444)
+- [Rijksmonumenten binnen 500 m van rijksmonument 36075 (Domplein, Utrecht)](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?binnen=rond:rijksmonument:36075:500&soort=rijksmonument)
+- [Forten in de Hollandse Waterlinies, op nummer](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?q=fort&binnen=werelderfgoed:759&sorteer=nummer)
+- [Terpen en wierden in Groningen en Friesland (archeologische monumenten met hun terreinen)](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?q=terp+OR+wierde&categorie=archeologisch&provincie=Groningen&provincie=Friesland)
+- [Archeologische monumenten in de Neder-Germaanse Limes](https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/?binnen=werelderfgoed:1631&categorie=archeologisch)
 
 ## Services
 
@@ -162,7 +166,7 @@ npm run test:live
 
 ## Deployment
 
-Net als de vorige demo: een Cloudflare Worker die alleen de statische bestanden uit `web/` serveert (`wrangler.jsonc`, naam `erfgoed-sdo-elastic-demo`). Koppel de GitHub-repository via Workers Builds, of handmatig:
+Net als de vorige demo: een Cloudflare Worker die alleen de statische bestanden uit `web/` serveert (`wrangler.jsonc`, naam `erfgoed-sdo-elastic-demo`), online op <https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/>. De repository is gekoppeld via Workers Builds: elke push naar `main` wordt automatisch gepubliceerd, andere branches krijgen een preview-URL. Handmatig:
 
 ```bash
 npx wrangler deploy
