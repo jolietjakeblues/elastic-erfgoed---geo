@@ -1,0 +1,29 @@
+{
+  "type": "elasticSearch",
+  "name": "Erfgoed-sdo-geo",
+  "config": {
+    "indexTemplates": [
+      { "name": "erfgoed-geo", "index_patterns": "index", "composed_of": ["geometrie", "nummers"] }
+    ],
+    "componentTemplates": [
+      {
+        "name": "geometrie",
+        "template": { "mappings": { "properties": {
+          "http://www opengis net/ont/geosparql#asWKT": { "type": "geo_shape", "ignore_malformed": true }
+        } } }
+      },
+      {
+        "name": "nummers",
+        "template": { "mappings": { "properties": {
+          "https://schema org/identifier": {
+            "type": "text",
+            "fields": {
+              "keyword": { "type": "keyword", "ignore_above": 256 },
+              "getal": { "type": "long", "ignore_malformed": true }
+            }
+          }
+        } } }
+      }
+    ]
+  }
+}
