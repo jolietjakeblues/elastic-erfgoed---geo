@@ -35,6 +35,10 @@ const vragen = [
   ['kerk', 'samenstellingen zonder plaatsnamen'],
   ['Lekkerkerk', 'plaatsnaam (mag geen kerken opleveren)'],
   ['Kerkstraat', 'straatnaam'],
+  ['linkerkant', 'bevat "kerk" maar is geen kerk'],
+  ['Nijkerk', 'plaatsnaam met kerk'],
+  ['dijk', 'ook liniedijk, zeedijk (niet Soestdijk)'],
+  ['Soestdijk', 'plaatsnaam met dijk'],
   ['Orvelte', 'eigennaam (mag niet slechter worden)'],
   ['Domplein', 'adres (mag niet slechter worden)']
 ];
@@ -46,6 +50,17 @@ for (const [query, why] of vragen) {
 }
 console.log(`\nZoekvragen in "Alles": ${oud} → ${nieuw}`);
 console.table(rows.map(({ query, why, oud: o, nieuw: n }) => ({ zoekvraag: query, waarom: why, [oud]: o, [nieuw]: n, verschil: typeof o === 'number' && typeof n === 'number' ? (n - o >= 0 ? `+${n - o}` : `${n - o}`) : '' })));
+// Enkelvoud tegen meervoud: in een goede service (bijna) gelijk. Marge 5%.
+console.log(`\nEnkelvoud / meervoud in "Alles"`);
+const paren = [['molen', 'molens'], ['toren', 'torens'], ['kasteel', 'kastelen'], ['gracht', 'grachten'], ['sluis', 'sluizen'], ['dijk', 'dijken'], ['woning', 'woningen'], ['kerk', 'kerken'], ['boerderij', 'boerderijen']];
+const tel = async (name, query) => { const data = await search(name, { size: 0, track_total_hits: true, query: { query_string: { query, fields: searchFields.Alles } } }); return data.error ? NaN : data.hits.total.value; };
+const gelijk = (x, y) => Math.abs(x - y) <= Math.max(x, y) * 0.05;
+const meervoud = [];
+for (const [een, meer] of paren) {
+  const [oe, om, ne, nm] = await Promise.all([tel(oud, een), tel(oud, meer), tel(nieuw, een), tel(nieuw, meer)]);
+  meervoud.push({ paar: `${een} / ${meer}`, [oud]: `${oe} / ${om} ${gelijk(oe, om) ? 'gelijk' : 'VERSCHIL'}`, [nieuw]: `${ne} / ${nm} ${gelijk(ne, nm) ? 'gelijk' : 'VERSCHIL'}` });
+}
+console.table(meervoud);
 console.log('\nEerste 3 treffers in de nieuwe service:');
 for (const row of rows) console.log(`  ${row.query.padEnd(20)} ${row.top}`);
 

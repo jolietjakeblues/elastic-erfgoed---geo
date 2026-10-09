@@ -1,5 +1,5 @@
 import { WKT_FIELD } from './geo.js';
-export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl2/_search';
+export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl3/_search';
 export const PAGE_SIZE = 25;
 export const MAX_WINDOW = 10000;
 export const EXPORT_MAX = 1000;
@@ -9,7 +9,7 @@ export const fields = Object.fromEntries(['description', 'name', 'address', 'pos
 // De soort staat alleen in de URI: …/id/rijksmonument/…, …/id/complex/… enzovoort.
 export const soorten = { rijksmonument: 'Rijksmonument', complex: 'Complex', archeologischterrein: 'Archeologisch terrein', gezicht: 'Beschermd gezicht', werelderfgoed: 'Werelderfgoed' };
 export const soortVan = uri => /\/id\/([a-z]+)\//.exec(String(uri ?? ''))?.[1] ?? null;
-// @id.soort is een keyword-subveld uit de index template (triply/elastic-service-nl2.json): de soort uit de URI.
+// @id.soort is een keyword-subveld uit de index template (triply/elastic-service-nl3.json): de soort uit de URI.
 const SOORT_FIELD = '@id.soort';
 const soortClause = soort => ({ term: { [SOORT_FIELD]: soort } });
 export const searchFields = {

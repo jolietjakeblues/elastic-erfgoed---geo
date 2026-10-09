@@ -22,19 +22,20 @@ Voorbeelden:
 ## Services
 
 ```text
-POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl2/_search
+POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl3/_search
 ```
 
 De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). Er wordt geen SPARQL gebruikt.
 
-De demo gebruikt de service **`Erfgoed-sdo-nl2`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
+De demo gebruikt de service **`Erfgoed-sdo-nl3`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
 
 | Service | Index template | Status |
 |---|---|---|
 | `Erfgoed-sdo` | geen (standaard van TriplyDB) | niet meer gebruikt door de demo |
 | `Erfgoed-sdo-geo` | `triply/elastic-service-geo.json`: geometrie, nummer | vorige versie van de demo |
-| `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort | test, vervangen door `-nl2` |
-| `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` | **gebruikt door de demo** |
+| `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort (versie 1) | test, kan weg |
+| `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` (versie 2) | test, kan weg zodra `-nl3` live goed draait |
+| `Erfgoed-sdo-nl3` | `triply/elastic-service-nl3.json` (versie 3) | **gebruikt door de demo** |
 
 ## Inhoud van de index (oktober 2026)
 
@@ -153,38 +154,55 @@ npm run gebieden
 
 ## Nederlandse taalverwerking
 
-De index template van `Erfgoed-sdo-nl2` (`triply/elastic-service-nl2.json`) geeft alle tekstvelden een eigen analyzer (via `dynamic_templates`):
+De index template van `Erfgoed-sdo-nl3` (`triply/elastic-service-nl3.json`) geeft alle tekstvelden een eigen analyzer (via `dynamic_templates`):
 
 | Bij indexeren (`nl_index`) | Bij zoeken (`nl_zoeken`) |
 |---|---|
 | kleine letters, accenten weg (`asciifolding`) | idem |
-| samenstellingen splitsen (`dictionary_decompounder`, 32 erfgoedwoorden) | synoniemen (`synonym_graph`) |
+| samenstellingen splitsen (`dictionary_decompounder`, 32 erfgoedwoorden) | |
+| vaste meervoudsregels (`stemmer_override`) | idem |
+| | synoniemen en zoekuitbreiding (`synonym_graph`) |
 | Nederlandse stopwoorden, stemmer `dutch_kp` | idem |
 
-- Adres, plaats, provincie en postcode krijgen alleen kleine letters en `asciifolding`. Anders levert `kerk` ook Lekkerkerk en de Kerkstraat op.
+- **Meervoud:** `dutch_kp` mist een aantal meervouden. Zeven vaste regels vangen dat op: `molen, molens => molen`, en hetzelfde voor toren, kasteel, gracht, sluis, dijk en woning.
+- **Kerk en dijk** worden niet opgesplitst. Dat raakt ook Lekkerkerk, Nijkerk, Soestdijk en zelfs "linkerkant". In plaats daarvan breidt de zoekanalyzer ze in één richting uit met samenstellingen die in de data voorkomen: `kerk` en `godshuis` zoeken ook op kerkgebouw, parochiekerk, dorpskerk, kruiskerk, zaalkerk, hallenkerk, schuilkerk en kerktoren; `dijk` ook op liniedijk, lekdijk, zeedijk, maasdijk, waaldijk, rivierdijk, kanaaldijk, ijsseldijk, lingedijk, grebbeliniedijk en spoordijk.
+- **Huis** wordt bewust niet opgesplitst: `*huis*` komt voor in 45.034 van de 68.078 documenten (woonhuis, trappenhuis, voorhuis).
+- **Adres, plaats, provincie en postcode** krijgen alleen kleine letters en `asciifolding`. Anders levert `kerk` ook Lekkerkerk en de Kerkstraat op.
 - Elk tekstveld heeft een subveld `.exact` (alleen kleine letters en accenten). Dat is de optie **Exact** in de demo.
 - `.keyword` blijft voor facetten en sorteren.
 - Valkuil: een component template wordt los gevalideerd. Een mapping die een normalizer of analyzer gebruikt, moet in hetzelfde component template staan als de `settings` die hem definiëren.
 
-Vergelijking met `node tests/compare-services.mjs Erfgoed-sdo-nl2 Erfgoed-sdo-geo` (9 oktober 2026):
+### Vergelijking
 
-| Zoekvraag (Alles) | `-geo` | `-nl2` | |
-|---|---:|---:|---|
-| `ruine` / `ruïne` | 51 / 99 | 147 / 147 | accenten tellen niet mee |
-| `molen` | 1.386 | 2.100 | ook windmolen, watermolen, korenmolen |
-| `molens` | 67 | 143 | beter, maar nog niet gelijk aan `molen` |
-| `boerderijen` | 392 | 8.782 | meervoud |
-| `godshuis` | 18 | 4.587 | synoniem van kerk; bovenaan echte kerken |
-| `kasteel AND gracht` | 188 | 537 | ook slotgracht, kasteelgracht |
-| `Lekkerkerk`, `Kerkstraat`, `Orvelte`, `Domplein` | 20, 1.192, 23, 14 | gelijk | namen ongewijzigd |
+Met `node tests/compare-services.mjs` (9 oktober 2026), in het zoekveld Alles:
 
-Versie 1 (`Erfgoed-sdo-nl`) met de Snowball-stemmer `dutch` en een langere samenstellingslijst had twee problemen: `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral Lekkerkerk.
+| Zoekvraag | `-geo` | `-nl2` | `-nl3` | |
+|---|---:|---:|---:|---|
+| `ruine` / `ruïne` | 51 / 99 | 147 / 147 | 147 / 147 | accenten tellen niet mee |
+| `molen` / `molens` | 1.386 / 67 | 2.100 / 143 | 2.100 / 2.108 | samenstellingen en meervoud |
+| `toren` / `torens` | 2.964 / 403 | 5.668 / 1.004 | 5.667 / 5.666 | |
+| `kasteel` / `kastelen` | 1.412 / 592 | 1.711 / 592 | 2.231 / 2.215 | |
+| `woning` / `woningen` | 2.898 / 2.238 | 37.992 / 9.037 | 37.752 / 37.752 | synoniem woonhuis, nu ook bij meervoud |
+| `boerderij` / `boerderijen` | 8.267 / 392 | 8.833 / 8.782 | 8.833 / 8.782 | |
+| `kerk` | 4.521 | 4.617 | 4.780 | ook parochiekerk, dorpskerk, … |
+| `godshuis` | 18 | 4.587 | 4.751 | synoniem; bovenaan echte kerken |
+| `dijk` | 782 | 878 | 1.174 | ook liniedijk, zeedijk, … |
+| `kasteel AND gracht` | 188 | 537 | 571 | ook slotgracht, kasteelgracht |
+| `linkerkant`, `Nijkerk`, `Soestdijk`, `Lekkerkerk`, `Kerkstraat` | | 154, 115, 37, 20, 1.192 | gelijk | namen niet geraakt |
+| `Orvelte`, `Domplein` | 23, 14 | 23, 14 | 23, 14 | |
 
-Nog te verbeteren (versie 3):
+Gracht/grachten (3.023 / 2.843) en sluis/sluizen (1.090 / 1.020) lijken nog te verschillen. In naam, omschrijving en type zijn ze gelijk; het enkelvoud vindt daarnaast straatnamen als "Oude Gracht" en "Oude Sluis". Dat is terecht.
 
-- `kerk`, `huis` en `dijk` zijn uit de samenstellingslijst gehaald. Daardoor vindt `kerk` geen dorpskerk of kerktoren meer. Oplossing: terugzetten met een beschermlijst van plaatsnamen (`keyword_marker`).
-- Meervoud op -s: vaste regels via `stemmer_override` (`molens => molen`).
-- Synoniemen uit de CHT-thesaurus in plaats van de huidige 8 regels.
+### Geschiedenis
+
+- **Versie 1** (`Erfgoed-sdo-nl`): Snowball-stemmer `dutch` en een langere samenstellingslijst. `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral in Lekkerkerk.
+- **Versie 2** (`Erfgoed-sdo-nl2`): stemmer `dutch_kp`, adresvelden zonder taalverwerking, kerk/huis/dijk uit de samenstellingslijst. Daardoor vond `kerk` geen dorpskerk meer en bleven zeven meervouden ongelijk.
+- **Versie 3** (`Erfgoed-sdo-nl3`): vaste meervoudsregels en zoekuitbreiding voor kerk en dijk.
+
+### Nog te verbeteren
+
+- **Volgorde:** bij `molens` staan een stadsmuur en woonhuizen bovenaan. Het aantal klopt, de rangorde niet. Oplossing in de demo: naam en type zwaarder laten wegen in de query (bijv. `name^3`, `additionalType^3`), geen nieuwe service.
+- Synoniemen uit de CHT-thesaurus in plaats van de huidige 9 regels.
 
 ## Lokaal starten
 
@@ -226,7 +244,8 @@ npx wrangler deploy
 | `web/data/gebieden.json` | Vooraf berekende koppeling, alleen voor de telling per gebied en de CSV |
 | `scripts/build_gebieden.py` | Bouwt `gebieden.json` |
 | `tests/geo-service.mjs` | Controle van de geo-service |
-| `triply/elastic-service-nl2.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
+| `triply/elastic-service-nl3.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
+| `triply/elastic-service-nl.json`, `-nl2.json` | Eerdere versies, ter vergelijking |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
 
 ## Bekende beperkingen
