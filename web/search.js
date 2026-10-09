@@ -1,5 +1,5 @@
 import { WKT_FIELD } from './geo.js';
-export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo/_search';
+export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-geo/_search';
 export const PAGE_SIZE = 25;
 export const MAX_WINDOW = 10000;
 export const EXPORT_MAX = 1000;
@@ -22,11 +22,37 @@ export const sorts = {
   relevantie: { label: 'Relevantie', sort: null },
   naam: { label: 'Naam (A–Z)', sort: [{ [`${fields.name}.keyword`]: { order: 'asc', missing: '_last' } }, '_score'] },
   plaats: { label: 'Plaats (A–Z)', sort: [{ [`${fields.addressLocality}.keyword`]: { order: 'asc', missing: '_last' } }, { [`${fields.name}.keyword`]: { order: 'asc', missing: '_last' } }] },
-  soort: { label: 'Soort', sort: [{ '@id.keyword': { order: 'asc' } }] }
+  soort: { label: 'Soort', sort: [{ '@id.keyword': { order: 'asc' } }] },
+  // identifier.getal is een long-subveld uit de index template (triply/elastic-service-geo.json).
+  nummer: { label: 'Nummer', sort: [{ [`${fields.identifier}.getal`]: { order: 'asc', missing: '_last' } }] }
 };
-// "Binnen": een gezicht, werelderfgoed of complex als context. Gezicht en werelderfgoed via de vooraf berekende
-// ruimtelijke koppeling (data/gebieden.json), complex via schema:hasPart.
-export const BINNEN = /^(gezicht|werelderfgoed|complex):\d{1,9}$/;
+// "Binnen": een context voor de zoekactie.
+//   gezicht:1325, werelderfgoed:818  ruimtelijk: alles wat binnen het vlak valt (geo_shape within)
+//   complex:524444                  de onderdelen volgens schema:hasPart
+//   rond:rijksmonument:12345:500    alles binnen 500 m van een object (geo_distance)
+export const AFSTANDEN = [100, 250, 500, 1000, 2000];
+export const BINNEN = /^((gezicht|werelderfgoed|complex):\d{1,9}|rond:(rijksmonument|complex|gezicht|werelderfgoed):\d{1,9}:(100|250|500|1000|2000))$/;
+const notItself = uri => [{ term: { '@id.keyword': uri } }];
+export const withinClause = (wkt, uri) => ({ bool: { filter: [{ geo_shape: { [WKT_FIELD]: { shape: wkt, relation: 'within' } } }], must_not: notItself(uri) } });
+export const nearClause = ({ lat, lon }, meters, uri) => ({ bool: { filter: [{ geo_distance: { distance: `${meters}m`, [WKT_FIELD]: { lat, lon } } }], must_not: notItself(uri) } });
+// De lijst met gezichten en werelderfgoed (zonder vlakken) voor de keuzelijst.
+export const gebiedenListQuery = () => ({
+  size: 600, _source: ['@id', fields.identifier, fields.name],
+  query: { bool: { should: [soortClause('gezicht'), soortClause('werelderfgoed')], minimum_should_match: 1 } },
+  sort: [{ [`${fields.name}.keyword`]: { order: 'asc', missing: '_last' } }]
+});
+// In welke gezichten en werelderfgoederen liggen deze objecten? Eén request: per object een benoemde geo_shape-query
+// (het gebied bevat het object); Elasticsearch geeft per gevonden gebied terug welke namen matchten.
+export const ligtInQuery = items => ({
+  size: 200, _source: ['@id', fields.identifier, fields.name],
+  query: { bool: {
+    filter: [{ bool: { should: [soortClause('gezicht'), soortClause('werelderfgoed')], minimum_should_match: 1 } }],
+    should: items.map(({ name, wkt }) => ({ geo_shape: { [WKT_FIELD]: { shape: wkt, relation: 'contains' }, _name: name } })),
+    minimum_should_match: 1
+  } }
+});
+// Vooraf berekende koppeling (data/gebieden.json), alleen nog voor de telling per gebied: 484 vlakken in één
+// aggregation zou ca. 5 MB per request zijn.
 export function gebiedClause(gebied) {
   const should = ['rijksmonument', 'complex'].filter(soort => gebied[soort]?.length).map(soort => ({ bool: { filter: [soortClause(soort), { terms: { [`${fields.identifier}.keyword`]: gebied[soort] } }] } }));
   return should.length ? { bool: { should, minimum_should_match: 1 } } : { bool: { must_not: { match_all: {} } } };
@@ -174,7 +200,7 @@ export function describe({ query = '', field = DEFAULT_FIELD, filters = {}, page
     const words = trimmed.replace(/"[^"]*"(~\d+)?/g, ' x ').replace(/[()]/g, ' ').split(/\s+/).filter(Boolean);
     if (words.length > 1 && !words.some(word => /^(AND|OR|NOT|&&|\|\|)$/.test(word) || /^[+-]/.test(word))) lines.push('Zonder AND/OR/NOT is het genoeg als één van de woorden voorkomt.');
   }
-  if (binnen) lines.push(binnen.startsWith('complex:') ? `Alleen de onderdelen van ${binnenLabel ?? binnen}.` : `Alleen wat ligt in ${binnenLabel ?? binnen}.`);
+  if (binnen) lines.push(binnen.startsWith('complex:') ? `Alleen de onderdelen van ${binnenLabel ?? binnen}.` : binnen.startsWith('rond:') ? `Alleen wat binnen ${binnenLabel ?? binnen} ligt.` : `Alleen wat ligt in ${binnenLabel ?? binnen}.`);
   const active = Object.entries(filters).filter(([, list]) => list.length);
   if (active.length) lines.push(`Alleen objecten met ${active.map(([key, list]) => `${facets[key].toLowerCase()} ${list.map(value => filterValue(key, value)).join(' of ')}`).join(', en ')}.`);
   if (jokers) lines.push('Testmodus: een jokerteken aan het begin (bijv. *molen) is toegestaan.');
