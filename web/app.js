@@ -447,6 +447,8 @@ document.querySelectorAll('[data-example]').forEach(node => node.addEventListene
   syncForm(); run();
 }));
 $('help-open').addEventListener('click', () => $('help').showModal());
+// "Hoe werkt de volgorde?" opent de zoekhulp bij dat onderwerp.
+document.querySelectorAll('[data-help]').forEach(node => node.addEventListener('click', () => { $('help').showModal(); $(`help-${node.dataset.help}`)?.scrollIntoView({ block: 'start' }); }));
 $('help-close').addEventListener('click', () => $('help').close());
 $('help').addEventListener('click', event => { if (event.target === $('help')) $('help').close(); });
 $('gebied-facet').addEventListener('toggle', () => { if ($('gebied-facet').open) countGebieden(contexts.get(state.binnen)); });

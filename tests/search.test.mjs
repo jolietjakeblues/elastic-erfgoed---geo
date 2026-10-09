@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
+import { queryFields, WEIGHT, buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
 const region = `${fields.addressRegion}.keyword`, type = `${fields.additionalType}.keyword`;
 const soort = name => ({ term: { '@id.soort': name } });
 const orvelte = { soort: 'gezicht', nummer: '1325', naam: 'Orvelte', rijksmonument: ['1', '2'], complex: ['9'] };
@@ -19,7 +19,7 @@ test('Soort: filter en facet via het URI-voorvoegsel', () => {
   const body = buildQuery({ filters: { soort: ['complex', 'gezicht'] } });
   assert.deepEqual(body.post_filter.bool.filter, [{ terms: { '@id.soort': ['complex', 'gezicht'] } }]);
   assert.deepEqual(body.aggs.soort.aggs.values, { terms: { field: '@id.soort', size: 10 } });
-  assert.ok(buildQuery({ field: 'Exact', query: 'molen' }).query.query_string.fields.includes(`${fields.name}.exact`));
+  assert.ok(buildQuery({ field: 'Exact', query: 'molen' }).query.query_string.fields.includes(`${fields.name}.exact^${WEIGHT}`));
   assert.deepEqual(body.aggs.soort.filter.bool.filter, []);
   assert.throws(() => buildQuery({ filters: { soort: ['kerk'] } }));
   assert.deepEqual(bucketsOf({ values: { buckets: { complex: { doc_count: 3 }, gezicht: { doc_count: 0 } } } }).buckets, [{ key: 'complex', doc_count: 3 }]);
@@ -109,4 +109,16 @@ test('Ruimtelijk: binnen een vlak, in de buurt, ligt in, sorteren op nummer', as
   assert.ok(!BINNEN.test('rond:archeologischterrein:1:500'));
   assert.equal(fromParams('?binnen=rond:complex:524444:1000').state.binnen, 'rond:complex:524444:1000');
   assert.deepEqual(buildQuery({ sort: 'nummer' }).sort, [{ [`${fields.identifier}.getal`]: { order: 'asc', missing: '_last' } }]);
+});
+test('Weging: naam en type tellen zwaarder in Alles en Exact, alleen in de query', () => {
+  const body = buildQuery({ query: 'molens' });
+  assert.ok(body.query.query_string.fields.includes(`${fields.name}^${WEIGHT}`));
+  assert.ok(body.query.query_string.fields.includes(`${fields.additionalType}^${WEIGHT}`));
+  assert.ok(body.query.query_string.fields.includes(fields.description));
+  assert.ok(Object.keys(body.highlight.fields).every(key => !key.includes('^')));
+  assert.ok(queryFields('Exact').includes(`${fields.name}.exact^${WEIGHT}`));
+  assert.deepEqual(queryFields('Omschrijving'), [fields.description]);
+  assert.deepEqual(buildExportQuery({ query: 'molens' }).query.bool.must[0].query_string.fields, queryFields('Alles'));
+  assert.match(describe({ query: 'molens' }).join(' '), /3× zo zwaar/);
+  assert.doesNotMatch(describe({ query: 'molens', sort: 'naam' }).join(' '), /zwaar/);
 });

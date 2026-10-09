@@ -201,8 +201,57 @@ Gracht/grachten (3.023 / 2.843) en sluis/sluizen (1.090 / 1.020) lijken nog te v
 
 ### Nog te verbeteren
 
-- **Volgorde:** bij `molens` staan een stadsmuur en woonhuizen bovenaan. Het aantal klopt, de rangorde niet. Oplossing in de demo: naam en type zwaarder laten wegen in de query (bijv. `name^3`, `additionalType^3`), geen nieuwe service.
 - Synoniemen uit de CHT-thesaurus in plaats van de huidige 9 regels.
+
+## Volgorde van resultaten (weging)
+
+Wat er gevonden wordt, bepaalt de index (hierboven). Wat **bovenaan** staat, bepaalt de zoekvraag. Dat is een aanpassing aan de voorkant, zonder nieuwe service.
+
+### Hoe Elasticsearch de volgorde bepaalt
+
+Bij sorteren op **Relevantie** krijgt elk resultaat een score volgens BM25. Die is hoger als het zoekwoord:
+
+- zeldzaam is in de hele index (*molens* weegt zwaarder dan *huis*);
+- vaker in het veld voorkomt;
+- in een kort veld staat (naam of type tegenover een omschrijving van pagina's lang);
+- in een veld met een gewicht staat.
+
+Zonder gewicht wint soms een lange omschrijving waarin het woord toevallig voorkomt.
+
+### Wat de demo doet
+
+In de zoekvelden **Alles** en **Exact** krijgen `schema:name` en `schema:additionalType` gewicht 3 (`WEIGHT` in `web/search.js`):
+
+```json
+"query_string": {
+  "query": "molens",
+  "fields": ["https://schema org/name^3", "https://schema org/description", "https://schema org/address", "…", "https://schema org/additionalType^3", "…"]
+}
+```
+
+- Het gewicht staat alleen in `query_string.fields`. In `highlight.fields` staan dezelfde velden zonder `^3`; dat is een veldnaam, geen query.
+- Facetten (`aggs`), filters (`post_filter`) en totalen gebruiken geen score en tellen dus precies hetzelfde.
+- Bij zoeken in één veld (bijv. alleen Omschrijving) is er niets af te wegen; dan geen gewicht.
+- Bij sorteren op naam, plaats, soort of nummer speelt de score geen rol.
+- Op de pagina staat dit uitgelegd onder **Sorteer op**, in de zoekhulp ("Volgorde: hoe bepaalt de demo wat bovenaan staat?") en onder "Toon Elasticsearch-query".
+
+### Effect (9 oktober 2026, service `Erfgoed-sdo-nl3`, eerste 5 treffers)
+
+| Zoekvraag | Zonder gewicht | Met `name^3`, `additionalType^3` |
+|---|---|---|
+| `molens` | Stadsmuur (Maastricht), 4× Woonhuis (Maastricht) | Molenes, De Molen (Ermelo), De Molen (Wildervank), Achtermolen (Leerdam), Veltmolen (Bleskensgraaf) |
+| `kerk` | Grote Kerk, Kerk, **Boerderij** (Spaubeek), Kerk, Kapel | 5× een kerk (Nieuwegein, Valkenburg, Overbetuwe, Nuenen, Hilversum) |
+| `dijk` | …, Bejaardentehuis en Woonhuis (Enkhuizen) | …, Vessemse Dijk, Casterse Dijk |
+| `kasteel AND gracht` | Gracht, 2× Historische aanleg, Kasteel Wijlre | Gracht, Kasteel Brederode, Het Kasteel (Breda), Kasteel Wijlre, Kasteel Guesselt |
+| `boerderijen` | 5× boerderij | gelijk |
+
+De totalen waren in alle gevallen gelijk (2.108 / 4.780 / 1.174 / 571 / 8.782).
+
+### Aanpassen
+
+- Het gewicht wijzigen: `WEIGHT` in `web/search.js`. Andere velden laten meewegen: de lijst `WEIGHTED`.
+- Gebruikers kunnen zelf wegen in de zoekvraag: `kasteel^3 OR gracht`.
+- Verder te onderzoeken: een `function_score` of `bool.should` die bijvoorbeeld rijksmonumenten met een naam voorrang geeft, of `"type": "most_fields"` / `"best_fields"` in `query_string` (nu de standaard `best_fields`: het beste veld telt, de andere tellen niet mee).
 
 ## Lokaal starten
 
