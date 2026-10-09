@@ -1,0 +1,6 @@
+{
+  "name": "erfgoed-sdo-elastic-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs", "test": "node --test tests/*.test.mjs", "test:live": "node tests/live.mjs", "gebieden": "python scripts/build_gebieden.py" }
+}

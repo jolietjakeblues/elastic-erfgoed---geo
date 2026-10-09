@@ -1,0 +1,9 @@
+// Cloudflare Worker die alleen de statische bestanden uit web/ serveert (geen Worker-script).
+// De browser praat zelf rechtstreeks met de RCE Elasticsearch-service.
+{
+  "name": "erfgoed-sdo-elastic-demo",
+  "compatibility_date": "2026-10-07",
+  "assets": {
+    "directory": "./web"
+  }
+}

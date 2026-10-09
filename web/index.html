@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Erfgoed SDO/Elastic demo</title>
+  <meta name="description" content="Verken rijksmonumenten, complexen, archeologische terreinen, beschermde gezichten en werelderfgoed via Linked Data en Elasticsearch.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="style.css"><script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#query">Direct naar zoeken</a>
+  <header class="site-header">
+    <div class="brand"><p><strong>Erfgoed SDO/Elastic demo</strong><br>Technische demonstrator op open data van de RCE</p></div>
+    <nav class="bar" aria-label="Kruimelpad"><div class="wrap"><ol class="crumbs"><li>Demo</li><li aria-current="page">Erfgoed zoeken</li></ol></div></nav>
+  </header>
+  <main>
+  <div class="search-band"><div class="wrap">
+    <h1>Zoeken in erfgoed via Elasticsearch</h1>
+    <p class="intro">Rijksmonumenten, complexen, archeologische terreinen, beschermde gezichten en werelderfgoed in één index. Zoek, filter, en bekijk wat er in een gezicht, werelderfgoed of complex ligt.</p>
+    <form id="search-form" class="search-panel">
+      <div class="query-input"><label for="query">Jouw zoekvraag</label><input id="query" name="query" type="search" maxlength="500" placeholder="Bijvoorbeeld: molen of kasteel AND gracht" aria-describedby="syntax"></div>
+      <div><label for="field">Zoek in</label><select id="field" name="field"><option>Alles</option><option>Omschrijving</option><option>Naam</option><option>Adres</option><option>Plaats</option><option>Type</option><option>Nummer</option></select></div>
+      <div class="actions"><button type="submit" class="primary">Zoek</button><button type="button" id="reset" title="Wis zoekvraag, filters en resultaten">Opnieuw beginnen</button></div>
+      <div class="binnen-input"><label for="binnen">Binnen gezicht of werelderfgoed <span class="optional">(optioneel)</span></label>
+        <div class="binnen-row"><input id="binnen" type="search" list="gebieden-lijst" autocomplete="off" placeholder="Typ een naam, bijvoorbeeld Orvelte of Kinderdijk" aria-describedby="binnen-hint"><datalist id="gebieden-lijst"></datalist></div>
+        <p id="binnen-hint" class="hint">Kies een van de 472 beschermde gezichten of 12 werelderfgoederen. Zoeken binnen een complex kan via de knop bij een complex.</p></div>
+      <p id="syntax" class="hint">Combineer met AND, OR, NOT (in hoofdletters) en haakjes. Gebruik quotes voor een exacte woordcombinatie. <button type="button" id="help-open" class="link-button">Zoekhulp en meer voorbeelden</button></p>
+      <p id="query-tip" class="tip" hidden></p>
+      <div class="examples"><span>Probeer:</span>
+        <button type="button" data-example="" data-binnen="gezicht:1325">Alles in Orvelte</button>
+        <button type="button" data-example="" data-binnen="werelderfgoed:818" data-soort="rijksmonument">Rijksmonumenten in Kinderdijk</button>
+        <button type="button" data-example="pakhuis" data-binnen="werelderfgoed:1349">pakhuis in de Grachtengordel</button>
+        <button type="button" data-example="" data-soort="werelderfgoed">Al het werelderfgoed</button>
+        <button type="button" data-example="buitenplaats" data-soort="complex">Complexen: buitenplaats</button>
+        <button type="button" data-example="grafheuvel">grafheuvel</button>
+      </div>
+    </form>
+  </div></div>
+  <div class="wrap">
+    <div id="status" role="status" aria-live="polite">Vul een zoekvraag in, kies een gebied of een voorbeeld.</div>
+    <p id="explain" class="explain" hidden></p>
+    <div id="context" class="context" hidden></div>
+    <div id="error" role="alert" hidden></div>
+    <div class="view-toggle" role="group" aria-label="Weergave"><button type="button" data-view="list" aria-pressed="true">Lijst</button><button type="button" data-view="map" aria-pressed="false">Kaart</button></div>
+    <div class="workspace" id="workspace" data-view="list">
+      <aside aria-label="Filters"><h2>Filters en facetten</h2><p class="hint">Vink meerdere waarden aan: binnen een filter geldt <em>of</em>, tussen filters <em>en</em>.</p>
+        <div id="facets"><p class="muted">Na het zoeken verschijnen hier de beschikbare filters.</p></div>
+        <details id="gebied-facet"><summary>In gezicht of werelderfgoed</summary><p class="hint">Hoeveel resultaten liggen in elk gezicht of werelderfgoed? Wordt geteld als dit blok open is.</p><div id="gebied-counts"></div></details>
+      </aside>
+      <section id="results-panel" aria-labelledby="results-heading"><div class="results-title"><h2 id="results-heading">Resultaten</h2><span id="page-info"></span></div>
+        <div class="toolbar"><label for="sort">Sorteer op</label><select id="sort"></select><button type="button" id="share">Kopieer link</button><button type="button" id="export" disabled>Download CSV</button></div>
+        <p id="export-info" class="hint" aria-live="polite"></p>
+        <div id="active-filters"></div><div id="results"><p class="empty">Zoek op woorden, een naam of een adres, of kies een gebied.</p></div><nav id="pagination" aria-label="Resultaatpagina’s" hidden><button id="previous" type="button">Vorige</button><span id="page-number"></span><button id="next" type="button">Volgende</button></nav></section>
+      <section id="map-panel" aria-labelledby="map-heading"><div class="results-title"><h2 id="map-heading">Kaart</h2></div><div id="map" role="region" aria-label="Kaart met zoekresultaten"></div>
+        <ul class="legend" aria-label="Legenda"><li data-soort="rijksmonument">Rijksmonument</li><li data-soort="complex">Complex</li><li data-soort="gezicht">Beschermd gezicht</li><li data-soort="werelderfgoed">Werelderfgoed</li><li data-soort="binnen">Gekozen gebied of complex</li></ul>
+        <p id="map-info" class="hint">Na het zoeken verschijnen de resultaten van deze pagina met een locatie op de kaart.</p></section>
+    </div>
+    <details class="technical"><summary>Toon Elasticsearch-query</summary><h2>In gewone taal</h2><ul id="query-explain"><li>Er is nog geen zoekactie uitgevoerd.</li></ul><h2>JSON</h2><p>De request die naar de Elasticsearch-service is gestuurd. Lange lijsten met nummers (bij een gekozen gebied) zijn ingekort weergegeven.</p><pre id="query-json">Er is nog geen zoekactie uitgevoerd.</pre></details>
+  <dialog id="help" aria-labelledby="help-title">
+    <div class="help-head"><h2 id="help-title">Zoekhulp</h2><button type="button" id="help-close" aria-label="Sluit zoekhulp">×</button></div>
+    <p>De zoekbalk gebruikt de Elasticsearch <code>query_string</code>-syntax. Klik op een voorbeeld om het meteen te proberen. Er wordt gezocht in het veld dat bij <strong>Zoek in</strong> staat.</p>
+    <h3>Wat zit er in de index?</h3>
+    <table>
+      <thead><tr><th>Soort</th><th>Wat</th><th>Relaties</th></tr></thead>
+      <tbody>
+        <tr><td>Rijksmonument</td><td>ca. 63.000 monumenten, met adres, type en omschrijving</td><td>onderdeel van een complex; bevat archeologische terreinen</td></tr>
+        <tr><td>Complex</td><td>ca. 2.700 complexen (buitenplaats, kloostercomplex, …)</td><td><code>schema:hasPart</code> naar de rijksmonumenten</td></tr>
+        <tr><td>Archeologisch terrein</td><td>ca. 1.800 terreinen, zonder eigen geometrie</td><td><code>schema:containedInPlace</code> naar een rijksmonument</td></tr>
+        <tr><td>Beschermd gezicht</td><td>472 stads- en dorpsgezichten</td><td>alleen een vlak; wat erin ligt is ruimtelijk berekend</td></tr>
+        <tr><td>Werelderfgoed</td><td>12 werelderfgoederen</td><td>alleen een vlak; wat erin ligt is ruimtelijk berekend</td></tr>
+      </tbody>
+    </table>
+    <h3>Combineren</h3>
+    <table>
+      <thead><tr><th>Syntax</th><th>Betekenis</th><th>Voorbeeld</th></tr></thead>
+      <tbody>
+        <tr><td><code>AND</code></td><td>beide woorden moeten voorkomen</td><td><button type="button" data-example="ijzer AND brug">ijzer AND brug</button></td></tr>
+        <tr><td><code>OR</code></td><td>minimaal één van de woorden</td><td><button type="button" data-example="ijzer OR staal">ijzer OR staal</button></td></tr>
+        <tr><td><code>NOT</code></td><td>sluit een woord uit</td><td><button type="button" data-example="kasteel AND NOT ruïne">kasteel AND NOT ruïne</button></td></tr>
+        <tr><td><code>( … )</code></td><td>voorwaarden groeperen</td><td><button type="button" data-example="(kasteel OR buitenplaats) AND gracht">(kasteel OR buitenplaats) AND gracht</button></td></tr>
+        <tr><td><code>+</code> / <code>-</code></td><td>kort voor “moet” / “mag niet”</td><td><button type="button" data-example="+kasteel -ruïne">+kasteel -ruïne</button></td></tr>
+      </tbody>
+    </table>
+    <h3>Woordcombinaties en varianten</h3>
+    <table>
+      <thead><tr><th>Syntax</th><th>Betekenis</th><th>Voorbeeld</th></tr></thead>
+      <tbody>
+        <tr><td><code>"…"</code></td><td>exacte woordcombinatie</td><td><button type="button" data-example='"gesmeed ijzer"'>"gesmeed ijzer"</button></td></tr>
+        <tr><td><code>"a b"~3</code></td><td>woorden in de buurt van elkaar</td><td><button type="button" data-example='"kasteel gracht"~3'>"kasteel gracht"~3</button></td></tr>
+        <tr><td><code>*</code></td><td>willekeurig vervolg (woorddeel)</td><td><button type="button" data-example="molen*">molen*</button></td></tr>
+        <tr><td><code>?</code></td><td>precies één willekeurig teken</td><td><button type="button" data-example="kast?el">kast?el</button></td></tr>
+        <tr><td><code>~</code></td><td>vergelijkbare spelling (tikfouten)</td><td><button type="button" data-example="kasteeel~">kasteeel~</button></td></tr>
+      </tbody>
+    </table>
+    <h3>Binnen een gezicht, werelderfgoed of complex</h3>
+    <ul>
+      <li>Kies bij <strong>Binnen gezicht of werelderfgoed</strong> een gebied. De zoekvraag en filters gelden dan alleen voor wat in dat gebied ligt. Een lege zoekvraag toont alles in het gebied.</li>
+      <li>Bij een complex staat de knop <strong>Toon onderdelen</strong>; bij een gezicht of werelderfgoed <strong>Toon wat erin ligt</strong>.</li>
+      <li>Het blok <strong>In gezicht of werelderfgoed</strong> links telt per gebied hoeveel resultaten erin liggen, bijvoorbeeld in welke gezichten de meeste molens staan.</li>
+      <li>De index kent geen relatie tussen een monument en een gezicht. Die is vooraf ruimtelijk berekend: een monument ligt in een gebied als een punt op het monument binnen het vlak van het gebied valt, of als minstens een kwart van het monument het gebied overlapt.</li>
+    </ul>
+    <h3>Goed om te weten</h3>
+    <ul>
+      <li><strong>Operatoren in hoofdletters.</strong> <code>and</code>, <code>en</code> of <code>of</code> zijn gewone zoekwoorden, geen operatoren.</li>
+      <li><strong>Zonder operator betekent een spatie OR.</strong> <code>kasteel gracht</code> vindt alles met kasteel <em>of</em> gracht.</li>
+      <li><strong>Hoofdletters in zoekwoorden maken niet uit</strong>, maar <strong>accenten wel</strong>: zoek op beide met <button type="button" data-example="ruïne OR ruine">ruïne OR ruine</button>.</li>
+      <li>Gezichten en werelderfgoed hebben geen omschrijving en adres. Ze worden gevonden op naam, nummer en categorie; standaard wordt daarom in <strong>Alles</strong> gezocht.</li>
+      <li>Een jokerteken aan het begin (<code>*steel</code>) is uitgeschakeld.</li>
+      <li>Haakjes en quotes moeten gesloten zijn, anders volgt een melding over de zoeksyntax.</li>
+    </ul>
+  </dialog>
+  </div>
+  </main>
+  <footer class="site-footer"><div class="bar"><div class="wrap"><p><strong>Dit is een demo.</strong> Bouw hier geen applicaties of andere afhankelijkheden op. De scripts, index en service kunnen zonder aankondiging wijzigen of verdwijnen.</p></div></div>
+    <div class="wrap"><p>Deze demo gebruikt de dataset <a href="https://linkeddata.cultureelerfgoed.nl/rce/erfgoed-sdo" target="_blank" rel="noopener noreferrer">erfgoed-sdo</a> van de Rijksdienst voor het Cultureel Erfgoed en is geen vervanging van het <a href="https://monumentenregister.cultureelerfgoed.nl/" target="_blank" rel="noopener noreferrer">Rijksmonumentenregister</a>. <span id="gebieden-info"></span></p></div></footer>
+</body>
+</html>
