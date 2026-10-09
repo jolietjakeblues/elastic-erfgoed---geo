@@ -20,6 +20,15 @@ export const searchFields = {
   Exact: [...['name', 'description', 'category', 'additionalType'].map(key => `${fields[key]}.exact`), ...['address', 'postalCode', 'addressLocality', 'addressRegion', 'identifier'].map(key => fields[key])]
 };
 export const DEFAULT_FIELD = 'Alles';
+// Weging voor de volgorde (relevantie): een treffer in de naam of het type telt WEIGHT keer zo zwaar als een treffer in
+// bijvoorbeeld de omschrijving. Alleen voor de zoekvelden met meerdere velden (Alles, Exact). Dit verandert alleen de
+// volgorde, nooit welke of hoeveel objecten gevonden worden; facetten en totalen blijven gelijk.
+export const WEIGHT = 3;
+const WEIGHTED = [fields.name, fields.additionalType];
+const weighted = key => WEIGHTED.some(base => key === base || key === `${base}.exact`);
+export function queryFields(field) {
+  return field === 'Alles' || field === 'Exact' ? searchFields[field].map(key => (weighted(key) ? `${key}^${WEIGHT}` : key)) : searchFields[field];
+}
 export const facets = { soort: 'Soort', addressRegion: 'Provincie/regio', addressLocality: 'Plaats', category: 'Categorie', additionalType: 'Type' };
 // Sorteren op nummer gebruikt identifier.getal (long); het gewone veld is tekst, dan komt 5 na 10040.
 export const sorts = {
@@ -83,7 +92,7 @@ function validate({ query = '', field = DEFAULT_FIELD, filters = {}, page = 0, s
     if (key === 'soort' && !list.every(item => Object.hasOwn(soorten, item))) throw new Error('Ongeldig filter.');
     if (list.length) clean[key] = [...new Set(list)];
   }
-  const text = query.trim() ? { query_string: { query: query.trim(), fields: searchFields[field], allow_leading_wildcard: jokers === true } } : { match_all: {} };
+  const text = query.trim() ? { query_string: { query: query.trim(), fields: queryFields(field), allow_leading_wildcard: jokers === true } } : { match_all: {} };
   const search = binnen ? { bool: { must: [text], filter: [context.clause] } } : text;
   return { search, filters: clean, field, page, sort };
 }
@@ -104,6 +113,7 @@ export function buildQuery(state = {}, context) {
     query: search,
     post_filter: { bool: { filter: filterClauses(filters) } },
     ...(sorts[sort].sort ? { sort: sorts[sort].sort } : {}),
+    // Highlighting zonder ^3: daar is het gewicht geen deel van de veldnaam.
     highlight: { fields: Object.fromEntries(searchFields[field].map(key => [key, { fragment_size: 275, number_of_fragments: 3 }])), pre_tags: ['<mark>'], post_tags: ['</mark>'], encoder: 'html' },
     aggs: facetAggs(filters)
   };
@@ -208,6 +218,7 @@ export function describe({ query = '', field = DEFAULT_FIELD, filters = {}, page
   const active = Object.entries(filters).filter(([, list]) => list.length);
   if (active.length) lines.push(`Alleen objecten met ${active.map(([key, list]) => `${facets[key].toLowerCase()} ${list.map(value => filterValue(key, value)).join(' of ')}`).join(', en ')}.`);
   if (jokers) lines.push('Testmodus: een jokerteken aan het begin (bijv. *molen) is toegestaan.');
+  if (trimmed && sort === 'relevantie' && (field === 'Alles' || field === 'Exact')) lines.push(`Volgorde: een treffer in de naam of het type telt ${WEIGHT}× zo zwaar als een treffer in de omschrijving of het adres. Dat verandert alleen de volgorde, niet het aantal.`);
   lines.push(`Gesorteerd op ${sort === 'relevantie' ? 'relevantie (best passend eerst)' : sorts[sort].label.charAt(0).toLowerCase() + sorts[sort].label.slice(1)}; resultaten ${page * PAGE_SIZE + 1} tot ${(page + 1) * PAGE_SIZE}.`);
   return lines;
 }

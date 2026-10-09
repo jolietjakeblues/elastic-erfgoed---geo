@@ -49,14 +49,15 @@
         <details id="gebied-facet"><summary>In gezicht of werelderfgoed</summary><p class="hint">Hoeveel resultaten liggen in elk gezicht of werelderfgoed? Wordt geteld als dit blok open is, met een vooraf berekende koppeling.</p><div id="gebied-counts"></div></details>
       </aside>
       <section id="results-panel" aria-labelledby="results-heading"><div class="results-title"><h2 id="results-heading">Resultaten</h2><span id="page-info"></span></div>
-        <div class="toolbar"><label for="sort">Sorteer op</label><select id="sort"></select><button type="button" id="share">Kopieer link</button><button type="button" id="export" disabled>Download CSV</button></div>
+        <div class="toolbar"><label for="sort">Sorteer op</label><select id="sort" aria-describedby="sort-hint"></select><button type="button" id="share">Kopieer link</button><button type="button" id="export" disabled>Download CSV</button></div>
+        <p id="sort-hint" class="hint">Bij <strong>Relevantie</strong> staat het best passende resultaat bovenaan. Een treffer in de naam of het type telt 3× zo zwaar als een treffer in de omschrijving. <button type="button" class="link-button" data-help="volgorde">Hoe werkt de volgorde?</button></p>
         <p id="export-info" class="hint" aria-live="polite"></p>
         <div id="active-filters"></div><div id="results"><p class="empty">Zoek op woorden, een naam of een adres, of kies een gebied.</p></div><nav id="pagination" aria-label="Resultaatpagina’s" hidden><button id="previous" type="button">Vorige</button><span id="page-number"></span><button id="next" type="button">Volgende</button></nav></section>
       <section id="map-panel" aria-labelledby="map-heading"><div class="results-title"><h2 id="map-heading">Kaart</h2></div><div id="map" role="region" aria-label="Kaart met zoekresultaten"></div>
         <ul class="legend" aria-label="Legenda"><li data-soort="rijksmonument">Rijksmonument</li><li data-soort="complex">Complex</li><li data-soort="gezicht">Beschermd gezicht</li><li data-soort="werelderfgoed">Werelderfgoed</li><li data-soort="binnen">Gekozen gebied, complex of afstand</li></ul>
         <p id="map-info" class="hint">Na het zoeken verschijnen de resultaten van deze pagina met een locatie op de kaart.</p></section>
     </div>
-    <details class="technical"><summary>Toon Elasticsearch-query</summary><h2>In gewone taal</h2><ul id="query-explain"><li>Er is nog geen zoekactie uitgevoerd.</li></ul><h2>JSON</h2><p>De request die naar de Elasticsearch-service is gestuurd. Lange lijsten met nummers (bij een gekozen gebied) zijn ingekort weergegeven.</p><pre id="query-json">Er is nog geen zoekactie uitgevoerd.</pre></details>
+    <details class="technical"><summary>Toon Elasticsearch-query</summary><h2>In gewone taal</h2><ul id="query-explain"><li>Er is nog geen zoekactie uitgevoerd.</li></ul><h2>JSON</h2><p>De request die naar de Elasticsearch-service is gestuurd. Lange lijsten met nummers (bij een gekozen gebied) zijn ingekort weergegeven.</p><pre id="query-json">Er is nog geen zoekactie uitgevoerd.</pre><h2>Weging in de JSON</h2><p>In <code>query_string.fields</code> staat achter de naam en het type <code>^3</code>. Dat is de weging: een treffer in dat veld telt 3× zo zwaar voor de score. In <code>highlight</code> staan dezelfde velden zonder <code>^3</code>, want daar hoort het gewicht niet bij de veldnaam. Facetten (<code>aggs</code>) en filters (<code>post_filter</code>) gebruiken geen score; die tellen dus precies hetzelfde.</p></details>
   <dialog id="help" aria-labelledby="help-title">
     <div class="help-head"><h2 id="help-title">Zoekhulp</h2><button type="button" id="help-close" aria-label="Sluit zoekhulp">×</button></div>
     <p>De zoekbalk gebruikt de Elasticsearch <code>query_string</code>-syntax. Klik op een voorbeeld om het meteen te proberen. Er wordt gezocht in het veld dat bij <strong>Zoek in</strong> staat.</p>
@@ -78,6 +79,17 @@
       <li><strong>Synoniemen</strong>: <button type="button" data-example="kerk">kerk</button> vindt ook parochiekerk, dorpskerk en kerkgebouw, en <button type="button" data-example="dijk">dijk</button> ook liniedijk en zeedijk; plaatsnamen als Nijkerk en Soestdijk niet. Ook kerkhof / begraafplaats / dodenakker, boerderij / hoeve, kasteel / burcht, terp / wierde.</li>
       <li>Wil je dat niet, kies dan bij <strong>Zoek in</strong> de optie <strong>Exact</strong>: dan zoekt de demo zonder meervoud, samenstellingen en synoniemen.</li>
     </ul>
+    <h3 id="help-volgorde">Volgorde: hoe bepaalt de demo wat bovenaan staat?</h3>
+    <p>Bij sorteren op <strong>Relevantie</strong> geeft Elasticsearch elk resultaat een score (het BM25-model). De score is hoger als:</p>
+    <ul>
+      <li>het zoekwoord <strong>zeldzaam</strong> is in de hele index (een woord als <em>molens</em> weegt zwaarder dan <em>huis</em>);</li>
+      <li>het zoekwoord <strong>vaker</strong> in het veld voorkomt;</li>
+      <li>het veld <strong>kort</strong> is (een treffer in een naam van drie woorden telt zwaarder dan in een omschrijving van drie pagina's);</li>
+      <li>het veld een <strong>gewicht</strong> heeft. In deze demo tellen de <strong>naam</strong> en het <strong>type</strong> 3× zo zwaar (<code>^3</code>) als de andere velden.</li>
+    </ul>
+    <p>Zonder weging kwam bij <button type="button" data-example="molens">molens</button> eerst een stadsmuur in Maastricht bovenaan, omdat het woord "molens" toevallig in die omschrijving voorkomt. Met weging staan de molens zelf bovenaan. Ook bij <button type="button" data-example="kerk">kerk</button> en <button type="button" data-example="kasteel AND gracht">kasteel AND gracht</button> komen de kerken en kastelen nu eerst.</p>
+    <p>De weging verandert <strong>alleen de volgorde</strong>. Welke en hoeveel objecten je vindt, de facetten en de CSV-export blijven gelijk. Kies je bij <strong>Sorteer op</strong> naam, plaats, soort of nummer, dan speelt de score helemaal geen rol.</p>
+    <p>De weging geldt voor de zoekvelden <strong>Alles</strong> en <strong>Exact</strong>. Zoek je in één veld (bijv. alleen Omschrijving), dan is er niets om tegen elkaar af te wegen. Zelf een gewicht geven kan ook in de zoekvraag: <button type="button" data-example="kasteel^3 OR gracht">kasteel^3 OR gracht</button>.</p>
     <h3>Combineren</h3>
     <table>
       <thead><tr><th>Syntax</th><th>Betekenis</th><th>Voorbeeld</th></tr></thead>
