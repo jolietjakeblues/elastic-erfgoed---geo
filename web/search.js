@@ -1,5 +1,5 @@
 import { WKT_FIELD } from './geo.js';
-export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-geo/_search';
+export const ENDPOINT = 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl2/_search';
 export const PAGE_SIZE = 25;
 export const MAX_WINDOW = 10000;
 export const EXPORT_MAX = 1000;
@@ -9,11 +9,15 @@ export const fields = Object.fromEntries(['description', 'name', 'address', 'pos
 // De soort staat alleen in de URI: …/id/rijksmonument/…, …/id/complex/… enzovoort.
 export const soorten = { rijksmonument: 'Rijksmonument', complex: 'Complex', archeologischterrein: 'Archeologisch terrein', gezicht: 'Beschermd gezicht', werelderfgoed: 'Werelderfgoed' };
 export const soortVan = uri => /\/id\/([a-z]+)\//.exec(String(uri ?? ''))?.[1] ?? null;
-const soortClause = soort => ({ prefix: { '@id.keyword': `${BASE}${soort}/` } });
+// @id.soort is een keyword-subveld uit de index template (triply/elastic-service-nl2.json): de soort uit de URI.
+const SOORT_FIELD = '@id.soort';
+const soortClause = soort => ({ term: { [SOORT_FIELD]: soort } });
 export const searchFields = {
   Alles: ['name', 'description', 'address', 'postalCode', 'addressLocality', 'addressRegion', 'category', 'additionalType', 'identifier'].map(key => fields[key]),
   Omschrijving: [fields.description], Naam: [fields.name], Adres: [fields.address],
-  Plaats: [fields.addressLocality], Type: [fields.additionalType], Nummer: [fields.identifier]
+  Plaats: [fields.addressLocality], Type: [fields.additionalType], Nummer: [fields.identifier],
+  // Zonder stemming, samenstellingen en synoniemen (subveld .exact; adresvelden zijn al exact). Accenten tellen niet mee.
+  Exact: [...['name', 'description', 'category', 'additionalType'].map(key => `${fields[key]}.exact`), ...['address', 'postalCode', 'addressLocality', 'addressRegion', 'identifier'].map(key => fields[key])]
 };
 export const DEFAULT_FIELD = 'Alles';
 export const facets = { soort: 'Soort', addressRegion: 'Provincie/regio', addressLocality: 'Plaats', category: 'Categorie', additionalType: 'Type' };
@@ -60,7 +64,7 @@ export function gebiedClause(gebied) {
 export const partsClause = uris => ({ terms: { '@id.keyword': uris.length ? uris : ['-'] } });
 // Filters zijn { facet: [waarden] }: binnen één facet OF, tussen facetten EN.
 function clauseFor(key, list) {
-  if (key === 'soort') return { bool: { should: list.map(soortClause), minimum_should_match: 1 } };
+  if (key === 'soort') return { terms: { [SOORT_FIELD]: list } };
   return { terms: { [`${fields[key]}.keyword`]: list } };
 }
 function filterClauses(filters, skip) {
@@ -86,7 +90,7 @@ function validate({ query = '', field = DEFAULT_FIELD, filters = {}, page = 0, s
 const facetAggs = filters => Object.fromEntries(Object.keys(facets).map(key => [key, {
   filter: { bool: { filter: filterClauses(filters, key) } },
   aggs: { values: key === 'soort'
-    ? { filters: { filters: Object.fromEntries(Object.keys(soorten).map(soort => [soort, soortClause(soort)])) } }
+    ? { terms: { field: SOORT_FIELD, size: 10 } }
     : { terms: { field: `${fields[key]}.keyword`, size: 100, show_term_doc_count_error: true } } }
 }]));
 // Zoeken (query) en filteren (post_filter) blijven gescheiden. Elke facet telt met de filters van de andere
@@ -188,7 +192,7 @@ export function fromParams(search) {
   return { state, active: [...input.keys()].some(key => ['q', 'binnen', ...Object.values(params)].includes(key)) };
 }
 // Uitleg van de zoekactie in gewone taal. binnenLabel is bijv. 'beschermd gezicht “Orvelte” (1325)'.
-const fieldText = { Alles: 'in alle tekstvelden', Omschrijving: 'in de omschrijving', Naam: 'in de naam', Adres: 'in het adres', Plaats: 'in de plaatsnaam', Type: 'in het type', Nummer: 'in het nummer' };
+const fieldText = { Alles: 'in alle tekstvelden', Omschrijving: 'in de omschrijving', Naam: 'in de naam', Adres: 'in het adres', Plaats: 'in de plaatsnaam', Type: 'in het type', Nummer: 'in het nummer', Exact: 'exact (zonder meervoud, samenstellingen en synoniemen)' };
 const filterValue = (key, value) => `“${key === 'soort' ? soorten[value] ?? value : value}”`;
 export function describe({ query = '', field = DEFAULT_FIELD, filters = {}, page = 0, sort = 'relevantie', jokers = false, binnen = null }, binnenLabel) {
   const lines = [];

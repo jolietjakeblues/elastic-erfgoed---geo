@@ -32,6 +32,9 @@ const vragen = [
   ['boerderijen', 'stemming: meervoud'],
   ['"gesmeed ijzer"', 'frase blijft werken'],
   ['kasteel AND gracht', 'Booleaans'],
+  ['kerk', 'samenstellingen zonder plaatsnamen'],
+  ['Lekkerkerk', 'plaatsnaam (mag geen kerken opleveren)'],
+  ['Kerkstraat', 'straatnaam'],
   ['Orvelte', 'eigennaam (mag niet slechter worden)'],
   ['Domplein', 'adres (mag niet slechter worden)']
 ];
