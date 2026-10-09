@@ -22,12 +22,19 @@ Voorbeelden:
 ## Services
 
 ```text
-POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-geo/_search
+POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl2/_search
 ```
 
 De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). Er wordt geen SPARQL gebruikt.
 
-De demo gebruikt de service **`Erfgoed-sdo-geo`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template (zie *Ruimtelijk zoeken*).
+De demo gebruikt de service **`Erfgoed-sdo-nl2`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
+
+| Service | Index template | Status |
+|---|---|---|
+| `Erfgoed-sdo` | geen (standaard van TriplyDB) | niet meer gebruikt door de demo |
+| `Erfgoed-sdo-geo` | `triply/elastic-service-geo.json`: geometrie, nummer | vorige versie van de demo |
+| `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort | test, vervangen door `-nl2` |
+| `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` | **gebruikt door de demo** |
 
 ## Inhoud van de index (oktober 2026)
 
@@ -45,14 +52,14 @@ Samen 68.078 documenten. De soort staat **alleen in de URI** (`@id`). `rdf:type`
 
 ### Facet "Soort"
 
-Een `filters`-aggregation met per soort een `prefix`-query op `@id.keyword`. Het filter werkt op dezelfde manier: binnen de facet *of*, tussen facetten *en*.
+Een gewone `terms`-aggregation en `terms`-filter op het veld `@id.soort`. Dat veld bestaat niet in de data: de index template maakt het met een normalizer die de soort uit de URI haalt (`…/id/complex/63921` wordt `complex`):
 
 ```json
-{ "bool": { "should": [
-  { "prefix": { "@id.keyword": "https://linkeddata.cultureelerfgoed.nl/cho-kennis/id/complex/" } },
-  { "prefix": { "@id.keyword": "https://linkeddata.cultureelerfgoed.nl/cho-kennis/id/gezicht/" } }
-], "minimum_should_match": 1 } }
+"normalizer": { "soort": { "type": "custom", "char_filter": ["soort_uit_uri"], "filter": ["lowercase"] } },
+"char_filter": { "soort_uit_uri": { "type": "pattern_replace", "pattern": "^.*/id/([a-z]+)/.*$", "replacement": "$1" } }
 ```
+
+Gecontroleerd: per soort gelijk aan een `prefix`-query op `@id.keyword` (63.099 / 2.689 / 1.806 / 472 / 12). In een eerdere versie van de demo was dit een `filters`-aggregation met vijf prefix-queries.
 
 ### Binnen een gezicht, werelderfgoed of complex, of in de buurt
 
@@ -97,7 +104,7 @@ Telt voor de huidige zoekactie hoeveel resultaten in elk gezicht of werelderfgoe
 
 ### Overig
 
-- Standaard wordt in **Alles** gezocht, omdat gezichten en werelderfgoed geen omschrijving hebben. Nieuw zoekveld: **Nummer**.
+- Standaard wordt in **Alles** gezocht, omdat gezichten en werelderfgoed geen omschrijving hebben. Nieuwe zoekvelden: **Nummer** en **Exact** (zonder meervoud, samenstellingen en synoniemen).
 - Nieuwe sorteringen **Soort** (op `@id.keyword`) en **Nummer** (op `identifier.getal`, een `long`-subveld uit de index template).
 - Resultaten hebben een gekleurd label per soort, ook op de kaart. Rijksmonumenten zonder naam krijgen type en adres als kop.
 - Registerlinks: Monumentenregister, Kennisbank RCE (gezichten) en UNESCO (werelderfgoed). Andere domeinen worden niet getoond.
@@ -144,6 +151,41 @@ pip install shapely
 npm run gebieden
 ```
 
+## Nederlandse taalverwerking
+
+De index template van `Erfgoed-sdo-nl2` (`triply/elastic-service-nl2.json`) geeft alle tekstvelden een eigen analyzer (via `dynamic_templates`):
+
+| Bij indexeren (`nl_index`) | Bij zoeken (`nl_zoeken`) |
+|---|---|
+| kleine letters, accenten weg (`asciifolding`) | idem |
+| samenstellingen splitsen (`dictionary_decompounder`, 32 erfgoedwoorden) | synoniemen (`synonym_graph`) |
+| Nederlandse stopwoorden, stemmer `dutch_kp` | idem |
+
+- Adres, plaats, provincie en postcode krijgen alleen kleine letters en `asciifolding`. Anders levert `kerk` ook Lekkerkerk en de Kerkstraat op.
+- Elk tekstveld heeft een subveld `.exact` (alleen kleine letters en accenten). Dat is de optie **Exact** in de demo.
+- `.keyword` blijft voor facetten en sorteren.
+- Valkuil: een component template wordt los gevalideerd. Een mapping die een normalizer of analyzer gebruikt, moet in hetzelfde component template staan als de `settings` die hem definiëren.
+
+Vergelijking met `node tests/compare-services.mjs Erfgoed-sdo-nl2 Erfgoed-sdo-geo` (9 oktober 2026):
+
+| Zoekvraag (Alles) | `-geo` | `-nl2` | |
+|---|---:|---:|---|
+| `ruine` / `ruïne` | 51 / 99 | 147 / 147 | accenten tellen niet mee |
+| `molen` | 1.386 | 2.100 | ook windmolen, watermolen, korenmolen |
+| `molens` | 67 | 143 | beter, maar nog niet gelijk aan `molen` |
+| `boerderijen` | 392 | 8.782 | meervoud |
+| `godshuis` | 18 | 4.587 | synoniem van kerk; bovenaan echte kerken |
+| `kasteel AND gracht` | 188 | 537 | ook slotgracht, kasteelgracht |
+| `Lekkerkerk`, `Kerkstraat`, `Orvelte`, `Domplein` | 20, 1.192, 23, 14 | gelijk | namen ongewijzigd |
+
+Versie 1 (`Erfgoed-sdo-nl`) met de Snowball-stemmer `dutch` en een langere samenstellingslijst had twee problemen: `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral Lekkerkerk.
+
+Nog te verbeteren (versie 3):
+
+- `kerk`, `huis` en `dijk` zijn uit de samenstellingslijst gehaald. Daardoor vindt `kerk` geen dorpskerk of kerktoren meer. Oplossing: terugzetten met een beschermlijst van plaatsnamen (`keyword_marker`).
+- Meervoud op -s: vaste regels via `stemmer_override` (`molens => molen`).
+- Synoniemen uit de CHT-thesaurus in plaats van de huidige 8 regels.
+
 ## Lokaal starten
 
 Vereist Node.js 18 of nieuwer, zonder npm-dependencies.
@@ -184,6 +226,8 @@ npx wrangler deploy
 | `web/data/gebieden.json` | Vooraf berekende koppeling, alleen voor de telling per gebied en de CSV |
 | `scripts/build_gebieden.py` | Bouwt `gebieden.json` |
 | `tests/geo-service.mjs` | Controle van de geo-service |
+| `triply/elastic-service-nl2.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
+| `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
 
 ## Bekende beperkingen
 

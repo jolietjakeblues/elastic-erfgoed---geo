@@ -20,7 +20,7 @@
     <p class="intro">Rijksmonumenten, complexen, archeologische terreinen, beschermde gezichten en werelderfgoed in één index. Zoek, filter, en bekijk wat er in een gezicht, werelderfgoed of complex ligt.</p>
     <form id="search-form" class="search-panel">
       <div class="query-input"><label for="query">Jouw zoekvraag</label><input id="query" name="query" type="search" maxlength="500" placeholder="Bijvoorbeeld: molen of kasteel AND gracht" aria-describedby="syntax"></div>
-      <div><label for="field">Zoek in</label><select id="field" name="field"><option>Alles</option><option>Omschrijving</option><option>Naam</option><option>Adres</option><option>Plaats</option><option>Type</option><option>Nummer</option></select></div>
+      <div><label for="field">Zoek in</label><select id="field" name="field"><option>Alles</option><option>Omschrijving</option><option>Naam</option><option>Adres</option><option>Plaats</option><option>Type</option><option>Nummer</option><option>Exact</option></select></div>
       <div class="actions"><button type="submit" class="primary">Zoek</button><button type="button" id="reset" title="Wis zoekvraag, filters en resultaten">Opnieuw beginnen</button></div>
       <div class="binnen-input"><label for="binnen">Binnen gezicht of werelderfgoed <span class="optional">(optioneel)</span></label>
         <div class="binnen-row"><input id="binnen" type="search" list="gebieden-lijst" autocomplete="off" placeholder="Typ een naam, bijvoorbeeld Orvelte of Kinderdijk" aria-describedby="binnen-hint"><datalist id="gebieden-lijst"></datalist></div>
@@ -71,6 +71,13 @@
         <tr><td>Werelderfgoed</td><td>12 werelderfgoederen</td><td>alleen een vlak; wat erin ligt zoekt Elasticsearch ruimtelijk</td></tr>
       </tbody>
     </table>
+    <h3>Nederlandse taal</h3>
+    <ul>
+      <li><strong>Meervoud en vervoegingen</strong> worden herkend: <button type="button" data-example="boerderijen">boerderijen</button> vindt ook boerderij. Dat werkt niet bij elk woord; <code>molens</code> vindt minder dan <code>molen</code>.</li>
+      <li><strong>Samenstellingen</strong>: <button type="button" data-example="molen">molen</button> vindt ook windmolen, watermolen en korenmolen. Dat werkt voor een vaste lijst erfgoedwoorden, zoals molen, toren, boerderij, schuur, sluis, gemaal, poort, gracht en kasteel. Plaats- en straatnamen worden niet gesplitst.</li>
+      <li><strong>Synoniemen</strong>: <button type="button" data-example="godshuis">godshuis</button> vindt ook kerk en kerkgebouw. Ook kerkhof / begraafplaats / dodenakker, boerderij / hoeve, kasteel / burcht, terp / wierde.</li>
+      <li>Wil je dat niet, kies dan bij <strong>Zoek in</strong> de optie <strong>Exact</strong>: dan zoekt de demo zonder meervoud, samenstellingen en synoniemen.</li>
+    </ul>
     <h3>Combineren</h3>
     <table>
       <thead><tr><th>Syntax</th><th>Betekenis</th><th>Voorbeeld</th></tr></thead>
@@ -106,7 +113,7 @@
     <ul>
       <li><strong>Operatoren in hoofdletters.</strong> <code>and</code>, <code>en</code> of <code>of</code> zijn gewone zoekwoorden, geen operatoren.</li>
       <li><strong>Zonder operator betekent een spatie OR.</strong> <code>kasteel gracht</code> vindt alles met kasteel <em>of</em> gracht.</li>
-      <li><strong>Hoofdletters in zoekwoorden maken niet uit</strong>, maar <strong>accenten wel</strong>: zoek op beide met <button type="button" data-example="ruïne OR ruine">ruïne OR ruine</button>.</li>
+      <li><strong>Hoofdletters en accenten maken niet uit</strong>: <button type="button" data-example="ruine">ruine</button> vindt ook ruïne.</li>
       <li>Gezichten en werelderfgoed hebben geen omschrijving en adres. Ze worden gevonden op naam, nummer en categorie; standaard wordt daarom in <strong>Alles</strong> gezocht.</li>
       <li>Een jokerteken aan het begin (<code>*steel</code>) is uitgeschakeld.</li>
       <li>Haakjes en quotes moeten gesloten zijn, anders volgt een melding over de zoeksyntax.</li>

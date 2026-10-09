@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
 const region = `${fields.addressRegion}.keyword`, type = `${fields.additionalType}.keyword`;
-const soort = name => ({ prefix: { '@id.keyword': `${BASE}${name}/` } });
+const soort = name => ({ term: { '@id.soort': name } });
 const orvelte = { soort: 'gezicht', nummer: '1325', naam: 'Orvelte', rijksmonument: ['1', '2'], complex: ['9'] };
 test('Zoeken (query) en filteren (post_filter) blijven gescheiden; facets tellen zonder hun eigen filter', () => {
   const body = buildQuery({ query: '(kasteel OR buitenplaats) AND gracht', filters: { addressRegion: ['Gelderland', 'Utrecht'], additionalType: 'Kasteel' }, page: 1 });
@@ -17,8 +17,9 @@ test('Zoeken (query) en filteren (post_filter) blijven gescheiden; facets tellen
 });
 test('Soort: filter en facet via het URI-voorvoegsel', () => {
   const body = buildQuery({ filters: { soort: ['complex', 'gezicht'] } });
-  assert.deepEqual(body.post_filter.bool.filter, [{ bool: { should: [soort('complex'), soort('gezicht')], minimum_should_match: 1 } }]);
-  assert.deepEqual(body.aggs.soort.aggs.values.filters.filters.werelderfgoed, soort('werelderfgoed'));
+  assert.deepEqual(body.post_filter.bool.filter, [{ terms: { '@id.soort': ['complex', 'gezicht'] } }]);
+  assert.deepEqual(body.aggs.soort.aggs.values, { terms: { field: '@id.soort', size: 10 } });
+  assert.ok(buildQuery({ field: 'Exact', query: 'molen' }).query.query_string.fields.includes(`${fields.name}.exact`));
   assert.deepEqual(body.aggs.soort.filter.bool.filter, []);
   assert.throws(() => buildQuery({ filters: { soort: ['kerk'] } }));
   assert.deepEqual(bucketsOf({ values: { buckets: { complex: { doc_count: 3 }, gezicht: { doc_count: 0 } } } }).buckets, [{ key: 'complex', doc_count: 3 }]);
