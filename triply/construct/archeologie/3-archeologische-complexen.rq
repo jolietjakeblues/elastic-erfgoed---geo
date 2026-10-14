@@ -1,0 +1,90 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX rnce: <https://data.cultureelerfgoed.nl/id/rnce#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:ArcheologischComplex -> schema:Place (360.375 objecten)
+# Ligt in een vondstlocatie, archeologisch terrein of onderzoeksgebied.
+# Ligt het in een vondstlocatie, dan is schema:isPartOf het onderzoeksgebied daarvan.
+# Geen eigen geometrie. Vertrouwelijkheid: eigen aanduiding, anders die van het bovenliggende object.
+# Formeel standpunt staat bij de meeste omschrijvingen op false; daarom geen filter daarop.
+# Plat: alleen het object zelf als subject. schema:identifier is de CHOI;
+# het Archis-complexnummer staat als tekst in schema:alternateName.
+#
+# Verrijking uit ABR (graph abr/2/thesaurus in CHO). Een concept rn/2/<uuid> is in ABR abr/2/<uuid>.
+#   schema:name          het ABR-label van het complextype (anders het rn-label)
+#   schema:sameAs        het ABR-concept van het complextype
+#   schema:keywords      de bovenliggende ABR-begrippen van het complextype, zonder het topconcept ("complextypen")
+#   schema:startDate / schema:endDate   beginjaar van de beginperiode en eindjaar van de eindperiode (negatief = v. Chr.)
+# Elke OPTIONAL begint bij ?complex_uri: een OPTIONAL met een lege koppelvariabele matcht anders met alles.
+
+CONSTRUCT {
+    ?complex_uri a schema:Place ;
+        schema:additionalType ?type_uri ;
+        schema:name ?typenaam ;
+        schema:sameAs ?type_abr ;
+        schema:keywords ?typegroep ;
+        schema:identifier ?choi ;
+        schema:alternateName ?archis ;
+        schema:description ?omschrijving ;
+        schema:temporalCoverage ?periode ;
+        schema:startDate ?beginjaar ;
+        schema:endDate ?eindjaar ;
+        schema:conditionsOfAccess ?vertrouwelijk ;
+        schema:containedInPlace ?ligt_in ;
+        schema:isPartOf ?onderzoeksgebied_uri .
+}
+WHERE {
+    GRAPH graph:instanties-rce {
+        ?complex_uri a ceo:ArcheologischComplex ;
+            ceo:cultuurhistorischObjectnummer ?choi .
+
+        OPTIONAL { ?complex_uri ceo:archis2Complexnummer ?complexnummer .
+                   BIND(CONCAT("complexnummer ", ?complexnummer) AS ?archis) }
+        OPTIONAL { ?complex_uri ceo:heeftOmschrijving/ceo:omschrijving ?omschrijving }
+        OPTIONAL { ?complex_uri ceo:ligtInObject ?ligt_in .
+                   OPTIONAL { ?ligt_in ceo:heeftVertrouwelijkAanduiding/skos:prefLabel ?vertrouwelijk_ouder }
+                   # ligt het complex in een vondstlocatie: het onderzoeksgebied daarvan (schema:isPartOf)
+                   OPTIONAL { ?ligt_in a ceo:Vondstlocatie ; ceo:ligtInObject ?onderzoeksgebied_uri .
+                              ?onderzoeksgebied_uri a ceo:ArcheologischOnderzoeksgebied } }
+        OPTIONAL { ?complex_uri ceo:heeftVertrouwelijkAanduiding/skos:prefLabel ?vertrouwelijk_eigen }
+    }
+    BIND(COALESCE(?vertrouwelijk_eigen, ?vertrouwelijk_ouder) AS ?vertrouwelijk)
+
+    # complextype: ABR-label, ABR-URI en bovenliggende begrippen; het rn-label alleen als ABR geen label heeft.
+    # Snelheid (Virtuoso): de ABR-URI is berekend (BIND), dus die moet eerst met een gewone triple vastgelegd
+    # worden (skos:prefLabel); pas daarbinnen skos:broader+. Een broader-pad direct op de berekende URI,
+    # of skos:broader*, laat Virtuoso per object alle ABR-concepten aflopen.
+    OPTIONAL {
+        GRAPH graph:instanties-rce { ?complex_uri ceo:heeftType/ceo:heeftTypeNaam ?type_uri }
+        BIND(IRI(REPLACE(STR(?type_uri), "/term/id/rn/2/", "/term/id/abr/2/")) AS ?type_abr_)
+        OPTIONAL {
+            GRAPH <https://data.cultureelerfgoed.nl/term/id/abr/2/thesaurus> {
+                ?type_abr_ skos:prefLabel ?type_abr_label . FILTER(LANG(?type_abr_label) IN ("nl", ""))
+                OPTIONAL { ?type_abr_ skos:broader+ ?typegroep_ . ?typegroep_ skos:broader ?hoger_ .
+                           ?typegroep_ skos:prefLabel ?typegroep . FILTER(LANG(?typegroep) IN ("nl", "")) }
+            }
+            BIND(?type_abr_ AS ?type_abr)
+        }
+        OPTIONAL { GRAPH graph:instanties-rce { ?type_uri skos:prefLabel ?type_rn_label }
+                   FILTER(!BOUND(?type_abr_label)) }
+        BIND(COALESCE(?type_abr_label, ?type_rn_label) AS ?typenaam)
+    }
+
+    # periode: ABR-labels en jaartallen (elke ABR-zoekactie in een eigen OPTIONAL, met eerst een gewone triple)
+    OPTIONAL {
+        GRAPH graph:instanties-rce { ?complex_uri ceo:heeftGebeurtenis/ceo:heeftDatering ?datering_ .
+                                     ?datering_ ceo:heeftBeginDatering/ceo:heeftPeriode ?begin_uri ;
+                                                ceo:heeftEindDatering/ceo:heeftPeriode ?eind_uri . }
+        BIND(IRI(REPLACE(STR(?begin_uri), "/term/id/rn/2/", "/term/id/abr/2/")) AS ?begin_abr_)
+        BIND(IRI(REPLACE(STR(?eind_uri), "/term/id/rn/2/", "/term/id/abr/2/")) AS ?eind_abr_)
+        OPTIONAL { GRAPH <https://data.cultureelerfgoed.nl/term/id/abr/2/thesaurus> {
+                       ?begin_abr_ skos:prefLabel ?begin . FILTER(LANG(?begin) IN ("nl", ""))
+                       OPTIONAL { ?begin_abr_ rnce:beginYearAbr ?beginjaar } } }
+        OPTIONAL { GRAPH <https://data.cultureelerfgoed.nl/term/id/abr/2/thesaurus> {
+                       ?eind_abr_ skos:prefLabel ?eind . FILTER(LANG(?eind) IN ("nl", ""))
+                       OPTIONAL { ?eind_abr_ rnce:endYearAbr ?eindjaar } } }
+        BIND(IF(?begin = ?eind, STR(?begin), CONCAT(STR(?begin), " - ", STR(?eind))) AS ?periode)
+    }
+}

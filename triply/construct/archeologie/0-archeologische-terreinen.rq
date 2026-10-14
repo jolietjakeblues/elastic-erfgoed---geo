@@ -1,0 +1,50 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:ArcheologischTerrein -> schema:Place (alle 13.025 terreinen, niet alleen de 1.812 bij een rijksmonument)
+# Een terrein heeft geen eigen geometrie. Testopzet: het vlak van het rijksmonument waarin het ligt
+# (alleen voor de beschermde terreinen). Bij meerdere terreinen per monument krijgen ze hetzelfde vlak.
+# Plat: alleen het object zelf als subject. schema:identifier is de CHOI;
+# het Archis-monumentnummer staat als tekst in schema:alternateName.
+
+CONSTRUCT {
+    ?terrein_uri a schema:Place ;
+        schema:additionalType "archeologisch terrein" ;
+        schema:name ?naam ;
+        schema:identifier ?choi ;
+        schema:alternateName ?archis ;
+        schema:category ?waardering ;
+        schema:description ?omschrijving ;
+        schema:addressLocality ?woonplaats ;
+        schema:addressRegion ?provincie ;
+        schema:conditionsOfAccess ?vertrouwelijk ;
+        geo:asWKT ?geometrie ;
+        schema:containedInPlace ?monument_uri .
+}
+WHERE {
+    GRAPH graph:instanties-rce {
+        ?terrein_uri a ceo:ArcheologischTerrein ;
+            ceo:cultuurhistorischObjectnummer ?choi .
+
+        OPTIONAL { ?terrein_uri ceo:archis2Monumentnummer ?monumentnummer .
+                   BIND(CONCAT("monumentnummer ", ?monumentnummer) AS ?archis) }
+        OPTIONAL { ?terrein_uri ceo:heeftLocatieAanduiding/ceo:locatienaam ?naam }
+        OPTIONAL { ?terrein_uri ceo:heeftArcheologischeWaardering/skos:prefLabel ?waardering }
+        OPTIONAL { ?terrein_uri ceo:heeftOmschrijving/ceo:omschrijving ?omschrijving }
+        OPTIONAL { ?terrein_uri ceo:heeftVertrouwelijkAanduiding/skos:prefLabel ?vertrouwelijk }
+
+        # terreinen hebben geen gemeente of provincie, wel een woonplaats via de BAG-relatie
+        OPTIONAL { ?terrein_uri ceo:heeftBasisregistratieRelatie/ceo:heeftBAGRelatie/ceo:woonplaatsnaam ?woonplaats }
+
+        # rijksmonument en geometrie geleend van dat monument
+        OPTIONAL { ?terrein_uri ceo:ligtInObject ?monument_uri .
+                   ?monument_uri a ceo:Rijksmonument .
+                   OPTIONAL { ?monument_uri ceo:heeftGeometrie/geo:asWKT ?geometrie } }
+    }
+    # provincie alleen via het rijksmonument; pad en label in één OPTIONAL (anders matcht een lege ?provincie_ met alle labels in owms)
+    OPTIONAL { GRAPH graph:instanties-rce { ?terrein_uri ceo:ligtInObject/ceo:heeftBasisregistratieRelatie/ceo:heeftProvincie ?provincie_ }
+               GRAPH graph:owms { ?provincie_ skos:prefLabel ?provincie } }
+}

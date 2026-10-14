@@ -1,0 +1,42 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:Werelderfgoed -> schema.org (12 kernzones; 18 objecten inclusief bufferzones)
+
+CONSTRUCT {
+    ?werelderfgoed_uri a schema:LandmarksOrHistoricalBuildings ;
+        schema:name ?naam ;
+        schema:identifier ?werelderfgoednummer ;
+        schema:category ?typering ;
+        schema:additionalType ?zone ;
+        geo:asWKT ?geometrie ;
+        schema:sameAs ?werelderfgoed_url .
+}
+WHERE {
+    {
+        SELECT DISTINCT ?werelderfgoed_uri ?naam ?werelderfgoednummer ?typering ?zone ?geometrie ?werelderfgoed_url
+        WHERE {
+            GRAPH graph:instanties-rce {
+                ?werelderfgoed_uri a ceo:Werelderfgoed ;
+                    ceo:werelderfgoednummer ?werelderfgoednummer ;
+                    ceo:heeftWerelderfgoedstatus <https://data.cultureelerfgoed.nl/term/id/rn/2/3dc4e152-8f8b-410d-9d5c-f12e65138dd9> ;
+                    ceo:heeftGeometrie ?geo_ .
+                ?geo_ ceo:heeftGeometrieType ?zone_uri .
+                # kernzone ("property"); haal het commentaar weg om ook de bufferzones mee te nemen
+                VALUES ?zone_uri {
+                    <https://data.cultureelerfgoed.nl/term/id/rn/2/6933689a-5d08-42f1-bad3-4e298680649f>
+                    # <https://data.cultureelerfgoed.nl/term/id/rn/2/527ff989-36b8-4a60-a38c-c236b924ebee>
+                }
+
+                OPTIONAL { ?zone_uri skos:prefLabel ?zone }
+                OPTIONAL { ?werelderfgoed_uri ceo:heeftNaam/ceo:naam ?naam }
+                OPTIONAL { ?geo_ geo:asWKT ?geometrie }
+            }
+            OPTIONAL { GRAPH graph:werelderfgoed_hvdl { ?werelderfgoed_uri ceo:heeftWerelderfgoedType/skos:prefLabel ?typering } }
+            OPTIONAL { GRAPH graph:werelderfgoed_hvdl { ?werelderfgoed_uri ceo:wordtGetoondOp ?werelderfgoed_url } }
+        }
+    }
+}

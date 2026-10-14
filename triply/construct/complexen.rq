@@ -1,0 +1,51 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX ceox: <https://linkeddata.cultureelerfgoed.nl/def/ceox#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:Complex (rijksmonumentcomplexen) -> schema.org (2.689 complexen)
+# Locatie en geometrie komen van het hoofdobject; dat is één gebouw, niet het hele complex.
+
+CONSTRUCT {
+    ?complex_uri a schema:LandmarksOrHistoricalBuildings ;
+        schema:name ?naam ;
+        schema:identifier ?complexnummer ;
+        schema:additionalType ?soort ;
+        schema:addressLocality ?woonplaats ;
+        schema:addressRegion ?provincie ;
+        schema:description ?omschrijving_label ;
+        geo:asWKT ?geometrie ;
+        schema:hasPart ?onderdeel ;
+        schema:sameAs ?complex_url .
+}
+WHERE {
+    {
+        SELECT DISTINCT ?complex_uri ?naam ?complexnummer ?soort ?woonplaats ?provincie ?omschrijving_label ?geometrie ?onderdeel ?complex_url
+        WHERE {
+            GRAPH graph:instanties-rce {
+                ?complex_uri a ceo:Complex ;
+                    ceo:complexnummer ?complexnummer ;
+                    ceo:heeftHoofdobject ?hoofdobject .
+                # alleen complexen waarvan het hoofdobject (nog) rijksmonument is
+                ?hoofdobject ceo:heeftJuridischeStatus <https://data.cultureelerfgoed.nl/term/id/rn/2/b2d9a59a-fe1e-4552-9a05-3c2acddff864> .
+
+                OPTIONAL { ?complex_uri ceo:heeftNaam/ceo:naam ?naam }
+                OPTIONAL { ?complex_uri ceo:heeftOmschrijving ?omschrijving_ .
+                           ?omschrijving_ ceo:formeelStandpunt true ;
+                                          ceo:omschrijving ?omschrijving_label }
+                OPTIONAL { ?complex_uri ceo:heeftRijksmonument ?onderdeel }
+                # locatie en geometrie van het hoofdobject
+                OPTIONAL { ?hoofdobject ceo:heeftBasisregistratieRelatie/ceo:heeftBAGRelatie/ceo:woonplaatsnaam ?woonplaats }
+                OPTIONAL { ?hoofdobject ceo:heeftGeometrie/geo:asWKT ?geometrie }
+            }
+            # pad en label in één OPTIONAL: anders matcht een lege ?provincie_ met alle labels in owms
+            OPTIONAL { GRAPH graph:instanties-rce { ?hoofdobject ceo:heeftBasisregistratieRelatie/ceo:heeftProvincie ?provincie_ }
+                       GRAPH graph:owms { ?provincie_ skos:prefLabel ?provincie } }
+            OPTIONAL { GRAPH graph:buitenplaatsen { ?complex_uri ceox:RCEBuitenplaats true }
+                       BIND("buitenplaats" AS ?soort) }
+            BIND(URI(CONCAT("https://monumentenregister.cultureelerfgoed.nl/complexen/", ?complexnummer)) AS ?complex_url)
+        }
+    }
+}
