@@ -6,6 +6,8 @@ Een webdemo die laat zien wat Elasticsearch bovenop de SDO/Linked Data-publicati
 
 Opvolger van de [Rijksmonumenten-demo](https://rijksmonumenten-sdo-elastic-demo.jolietjakeblues64.workers.dev/) ([repo](https://github.com/jolietjakeblues/elastic)). Zoeksyntax, facetlogica, deelbare URL, CSV-export, huisstijl en begrenzing werken hetzelfde. Hieronder staat vooral wat er anders is.
 
+Zusterdemo: de [Archeologie SDO/Elastic demo](https://elastic-archeologie.jolietjakeblues64.workers.dev/) ([repo](https://github.com/jolietjakeblues/elastic-archeologie), dataset `archeologie-sdo`) met onderzoeksgebieden, vondstlocaties, alle 13.025 archeologische terreinen, complexen, grondsporen en vondsten, verrijkt met het ABR. Een terrein dat in een rijksmonument ligt, linkt daar naar het monument in deze demo.
+
 **Online:** <https://erfgoed-sdo-elastic-demo.jolietjakeblues64.workers.dev/>
 
 Voorbeelden:
@@ -47,7 +49,26 @@ De demo gebruikt de service **`Erfgoed-sdo-nl3`**, niet de standaardservice `Erf
 | Beschermd gezicht | 472 | `…/id/gezicht/` | naam, nummer, categorie (bijv. "III. Het dorp"), vlak; geen adres of omschrijving |
 | Werelderfgoed | 12 | `…/id/werelderfgoed/` | naam, nummer, categorie, vlak, link naar UNESCO |
 
-Samen 68.078 documenten. De soort staat **alleen in de URI** (`@id`). `rdf:type` is voor bijna alles `schema:LandmarksOrHistoricalBuildings` en dus niet bruikbaar. Het `_id` van een document is de URI. Net als in de vorige index staat in veldnamen een spatie in plaats van een punt: `https://schema org/name`.
+Samen 68.078 documenten. De index wordt gevuld met CONSTRUCT-queries (zie *Data: CONSTRUCT-queries*). De soort staat **alleen in de URI** (`@id`). `rdf:type` is voor bijna alles `schema:LandmarksOrHistoricalBuildings` en dus niet bruikbaar. Het `_id` van een document is de URI. Net als in de vorige index staat in veldnamen een spatie in plaats van een punt: `https://schema org/name`.
+
+## Data: CONSTRUCT-queries
+
+De dataset `erfgoed-sdo` wordt gevuld met CONSTRUCT-queries op het RCE CHO-endpoint (`rce/cho`), naar schema.org. De queries voor de gebieden, complexen en archeologische monumenten staan in [`triply/construct/`](triply/construct/):
+
+| Query | Inhoud | Opmerking |
+|---|---|---|
+| `gezichten.rq` | 472 beschermde gezichten | naam, nummer, typering (bijv. "III. Het dorp"), vlak; link naar de Kennisbank uit graph `gezicht_hvdl` |
+| `werelderfgoed.rq` | 12 werelderfgoederen (kernzones) | typering en UNESCO-link uit graph `werelderfgoed_hvdl`; bufferzones staan uitgecommentarieerd in `VALUES` |
+| `complexen.rq` | 2.689 complexen | onderdelen (`hasPart`), buitenplaats (graph `buitenplaatsen`), plaats, provincie en geometrie van het hoofdobject, link naar het monumentenregister |
+| `archeologische-rijksmonumenten.rq` | 1.461 archeologische rijksmonumenten en hun 1.806 terreinen | `containsPlace` / `containedInPlace`; terreinen hebben geen eigen geometrie |
+
+De query voor de rijksmonumenten zelf staat (nog) niet in deze map. In [`triply/construct/archeologie/`](triply/construct/archeologie/) staan kopieën van de queries voor `archeologie-sdo`; de leidende versie staat in [elastic-archeologie](https://github.com/jolietjakeblues/elastic-archeologie).
+
+Valkuilen die in deze queries zijn opgelost:
+
+- **Labels van gemeente en provincie** (graph `owms`) worden met hun pad in **één** `OPTIONAL` opgehaald. Los van elkaar matcht een lege variabele (bijv. een monument zonder gemeente) met alle ca. 4.700 labels in `owms`; de query voor de archeologische monumenten liep daardoor op tot 22 miljoen rijen en een time-out.
+- **Graphs expliciet**: alles komt uit `graph:instanties-rce`, behalve de hvdl-graphs, `buitenplaatsen` en `owms`. Een label uit een andere graph hoort in een eigen `GRAPH`-blok.
+- **Taal van labels**: sommige labels staan dubbel, met en zonder `@nl`. Haal een label uit één graph, dan is er geen dubbele waarde.
 
 ## Wat is er nieuw ten opzichte van de Rijksmonumenten-demo
 
@@ -296,11 +317,13 @@ npx wrangler deploy
 | `triply/elastic-service-nl3.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
 | `triply/elastic-service-nl.json`, `-nl2.json` | Eerdere versies, ter vergelijking |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
+| `triply/construct/*.rq` | CONSTRUCT-queries voor gezichten, werelderfgoed, complexen en archeologische rijksmonumenten met hun terreinen |
+| `triply/construct/archeologie/*.rq` | Kopieën van de queries voor `archeologie-sdo` (leidend: [elastic-archeologie](https://github.com/jolietjakeblues/elastic-archeologie)) |
 
 ## Bekende beperkingen
 
 - *Binnen een gebied* betekent: helemaal binnen het vlak (`within`). Een monument dat over de grens ligt telt niet mee. Of dat overeenkomt met de juridische aanwijzing moet de RCE beoordelen.
 - De telling per gebied en de CSV-kolom *Ligt in* gebruiken nog de vooraf berekende koppeling. Na een nieuwe versie van de index moet `gebieden.json` opnieuw gebouwd worden.
 - Bij de Hollandse Waterlinies gaat er 850 kB vlak mee in elke zoekactie.
-- Archeologische terreinen hebben geen geometrie en staan dus niet op de kaart. Ze zijn wel te vinden via het rijksmonument waarin ze liggen.
+- Archeologische terreinen hebben geen geometrie en staan dus niet op de kaart. Ze zijn wel te vinden via het rijksmonument waarin ze liggen. Alle 13.025 terreinen (ook zonder rijksmonument) staan in de [Archeologie-demo](https://elastic-archeologie.jolietjakeblues64.workers.dev/?soort=archeologischterrein).
 - De kaart toont alleen de resultaten van de huidige pagina (25).

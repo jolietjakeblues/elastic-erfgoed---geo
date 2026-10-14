@@ -1,0 +1,41 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:ArcheologischOnderzoeksgebied -> schema:Place (113.434 objecten)
+# Inclusief de 1.902 vertrouwelijke gebieden, met geometrie (testopzet).
+# Plat: alleen het object zelf als subject, zodat de Elasticsearch-index één document per object krijgt.
+# schema:identifier is de CHOI (gelijk aan het getal in de URI).
+
+CONSTRUCT {
+    ?onderzoeksgebied_uri a schema:Place ;
+        schema:additionalType "archeologisch onderzoeksgebied" ;
+        schema:name ?naam ;
+        schema:identifier ?choi ;
+        schema:description ?omschrijving ;
+        schema:addressLocality ?gemeente ;
+        schema:addressRegion ?provincie ;
+        schema:conditionsOfAccess ?vertrouwelijk ;
+        schema:keywords ?amk ;
+        geo:asWKT ?geometrie .
+}
+WHERE {
+    GRAPH graph:instanties-rce {
+        ?onderzoeksgebied_uri a ceo:ArcheologischOnderzoeksgebied ;
+            ceo:cultuurhistorischObjectnummer ?choi .
+
+        OPTIONAL { ?onderzoeksgebied_uri ceo:heeftLocatieAanduiding/ceo:locatienaam ?naam }
+        OPTIONAL { ?onderzoeksgebied_uri ceo:heeftOmschrijving/ceo:omschrijving ?omschrijving }
+        OPTIONAL { ?onderzoeksgebied_uri ceo:heeftGeometrie/geo:asWKT ?geometrie }
+        OPTIONAL { ?onderzoeksgebied_uri ceo:heeftVertrouwelijkAanduiding/skos:prefLabel ?vertrouwelijk }
+        OPTIONAL { ?onderzoeksgebied_uri ceo:indicatieArcheologischeMonumentenKaartWaardig true .
+                   BIND("indicatie AMK-waardig" AS ?amk) }
+    }
+    # pad en label in één OPTIONAL: anders matcht een lege ?gemeente_ met alle labels in owms
+    OPTIONAL { GRAPH graph:instanties-rce { ?onderzoeksgebied_uri ceo:heeftBasisregistratieRelatie/ceo:heeftGemeente ?gemeente_ }
+               GRAPH graph:owms { ?gemeente_ skos:prefLabel ?gemeente } }
+    OPTIONAL { GRAPH graph:instanties-rce { ?onderzoeksgebied_uri ceo:heeftBasisregistratieRelatie/ceo:heeftProvincie ?provincie_ }
+               GRAPH graph:owms { ?provincie_ skos:prefLabel ?provincie } }
+}

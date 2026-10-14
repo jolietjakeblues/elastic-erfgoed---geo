@@ -1,0 +1,38 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:Gezicht (beschermde stads- en dorpsgezichten) -> schema.org (472 objecten)
+
+CONSTRUCT {
+    ?gezicht_uri a schema:LandmarksOrHistoricalBuildings ;
+        schema:name ?naam ;
+        schema:identifier ?gezichtsnummer ;
+        schema:category ?typering ;
+        schema:additionalType ?status ;
+        geo:asWKT ?geometrie ;
+        schema:sameAs ?gezicht_url .
+}
+WHERE {
+    {
+        SELECT DISTINCT ?gezicht_uri ?naam ?gezichtsnummer ?typering ?status ?geometrie ?gezicht_url
+        WHERE {
+            GRAPH graph:instanties-rce {
+                ?gezicht_uri a ceo:Gezicht ;
+                    ceo:gezichtsnummer ?gezichtsnummer ;
+                    ceo:heeftGezichtsstatus ?status_uri .
+                # alleen beschermde gezichten
+                VALUES ?status_uri { <https://data.cultureelerfgoed.nl/term/id/rn/2/fd968529-bf70-4afa-8564-7c6c2fcfcc54> }
+
+                OPTIONAL { ?status_uri skos:prefLabel ?status }
+                OPTIONAL { ?gezicht_uri ceo:heeftNaam/ceo:naam ?naam }
+                OPTIONAL { ?gezicht_uri ceo:heeftType/ceo:heeftTypeNaam ?type_ .
+                           ?type_ skos:prefLabel ?typering }
+                OPTIONAL { ?gezicht_uri ceo:heeftGeometrie/geo:asWKT ?geometrie }
+            }
+            OPTIONAL { GRAPH graph:gezicht_hvdl { ?gezicht_uri ceo:wordtGetoondOp ?gezicht_url } }
+        }
+    }
+}

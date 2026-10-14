@@ -1,0 +1,66 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# Archeologische rijksmonumenten met hun archeologische terreinen -> schema.org
+# 1.461 monumenten, 1.806 gekoppelde terreinen. Terreinen hebben geen eigen geometrie.
+
+CONSTRUCT {
+    ?monument_uri a schema:LandmarksOrHistoricalBuildings ;
+        schema:name ?naam ;
+        schema:identifier ?rijksmonumentnummer ;
+        schema:category ?monumentaard ;
+        schema:addressLocality ?gemeente ;
+        schema:addressRegion ?provincie ;
+        schema:description ?omschrijving_label ;
+        geo:asWKT ?geometrie ;
+        schema:containsPlace ?terrein_uri ;
+        schema:sameAs ?monument_url .
+
+    ?terrein_uri a schema:Place ;
+        schema:name ?terrein_naam ;
+        schema:identifier ?archis2_monumentnummer ;
+        schema:additionalType ?waardering ;
+        schema:containedInPlace ?monument_uri .
+}
+WHERE {
+    {
+        SELECT DISTINCT ?monument_uri ?naam ?rijksmonumentnummer ?monumentaard ?gemeente ?provincie
+                        ?omschrijving_label ?geometrie ?monument_url
+                        ?terrein_uri ?terrein_naam ?archis2_monumentnummer ?waardering
+        WHERE {
+            GRAPH graph:instanties-rce {
+                ?monument_uri a ceo:Rijksmonument ;
+                    ceo:rijksmonumentnummer ?rijksmonumentnummer ;
+                    ceo:heeftJuridischeStatus <https://data.cultureelerfgoed.nl/term/id/rn/2/b2d9a59a-fe1e-4552-9a05-3c2acddff864> ;
+                    ceo:heeftMonumentAard ?monumentaard_uri .
+                # alleen archeologische rijksmonumenten
+                VALUES ?monumentaard_uri { <https://data.cultureelerfgoed.nl/term/id/rn/2/b673c8c1-5d93-496d-8f9e-89133d579d77> }
+                ?monumentaard_uri skos:prefLabel ?monumentaard .
+
+                OPTIONAL { ?monument_uri ceo:heeftNaam/ceo:naam ?naam }
+                OPTIONAL { ?monument_uri ceo:heeftOmschrijving ?omschrijving_ .
+                           ?omschrijving_ ceo:formeelStandpunt true ;
+                                          ceo:omschrijving ?omschrijving_label }
+                OPTIONAL { ?monument_uri ceo:heeftGeometrie/geo:asWKT ?geometrie }
+
+                # gekoppelde archeologische terreinen
+                OPTIONAL {
+                    ?monument_uri ceo:bevatObject ?terrein_uri .
+                    ?terrein_uri a ceo:ArcheologischTerrein ;
+                        ceo:archis2Monumentnummer ?archis2_monumentnummer .
+                    OPTIONAL { ?terrein_uri ceo:heeftLocatieAanduiding/ceo:locatienaam ?terrein_naam }
+                    OPTIONAL { ?terrein_uri ceo:heeftArcheologischeWaardering/skos:prefLabel ?waardering }
+                }
+            }
+            # pad en label in één OPTIONAL: anders matcht een lege ?gemeente_ met alle labels in owms
+            OPTIONAL { GRAPH graph:instanties-rce { ?monument_uri ceo:heeftBasisregistratieRelatie/ceo:heeftGemeente ?gemeente_ }
+                       GRAPH graph:owms { ?gemeente_ skos:prefLabel ?gemeente } }
+            OPTIONAL { GRAPH graph:instanties-rce { ?monument_uri ceo:heeftBasisregistratieRelatie/ceo:heeftProvincie ?provincie_ }
+                       GRAPH graph:owms { ?provincie_ skos:prefLabel ?provincie } }
+            BIND(URI(CONCAT("https://monumentenregister.cultureelerfgoed.nl/monumenten/", ?rijksmonumentnummer)) AS ?monument_url)
+        }
+    }
+}

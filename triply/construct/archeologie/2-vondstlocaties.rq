@@ -1,0 +1,51 @@
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX schema: <https://schema.org/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX graph: <https://linkeddata.cultureelerfgoed.nl/graph/>
+
+# ceo:Vondstlocatie -> schema:Place (111.854 objecten)
+# Een vondstlocatie heeft geen eigen geometrie. Testopzet: het vlak van het
+# onderzoeksgebied waarin hij ligt (alleen voor ca. 40.000 vondstlocaties).
+# Dat vlak is het hele onderzoeksgebied, niet de vindplek.
+# Plat: alleen het object zelf als subject. schema:identifier is de CHOI;
+# Archis-nummers staan als tekst in schema:alternateName.
+
+CONSTRUCT {
+    ?vondstlocatie_uri a schema:Place ;
+        schema:additionalType "vondstlocatie" ;
+        schema:name ?naam ;
+        schema:identifier ?choi ;
+        schema:alternateName ?waarneming, ?vondstmelding ;
+        schema:description ?omschrijving ;
+        schema:addressLocality ?gemeente ;
+        schema:addressRegion ?provincie ;
+        schema:conditionsOfAccess ?vertrouwelijk ;
+        schema:keywords ?verwerving ;
+        geo:asWKT ?geometrie ;
+        schema:containedInPlace ?onderzoeksgebied_uri .
+}
+WHERE {
+    GRAPH graph:instanties-rce {
+        ?vondstlocatie_uri a ceo:Vondstlocatie ;
+            ceo:cultuurhistorischObjectnummer ?choi .
+
+        OPTIONAL { ?vondstlocatie_uri ceo:heeftLocatieAanduiding/ceo:locatienaam ?naam }
+        OPTIONAL { ?vondstlocatie_uri ceo:archis2Waarnemingsnummer ?waarnemingsnummer .
+                   BIND(CONCAT("waarnemingsnummer ", ?waarnemingsnummer) AS ?waarneming) }
+        OPTIONAL { ?vondstlocatie_uri ceo:archis2Vondstmeldingsnummer ?vondstmeldingsnummer .
+                   BIND(CONCAT("vondstmeldingsnummer ", ?vondstmeldingsnummer) AS ?vondstmelding) }
+        OPTIONAL { ?vondstlocatie_uri ceo:heeftOmschrijving/ceo:omschrijving ?omschrijving }
+        OPTIONAL { ?vondstlocatie_uri ceo:heeftVertrouwelijkAanduiding/skos:prefLabel ?vertrouwelijk }
+        OPTIONAL { ?vondstlocatie_uri ceo:heeftVerwerving/skos:prefLabel ?verwerving }
+
+        # geometrie geleend van het onderzoeksgebied
+        OPTIONAL { ?vondstlocatie_uri ceo:ligtInObject ?onderzoeksgebied_uri .
+                   ?onderzoeksgebied_uri a ceo:ArcheologischOnderzoeksgebied .
+                   OPTIONAL { ?onderzoeksgebied_uri ceo:heeftGeometrie/geo:asWKT ?geometrie } }
+    }
+    OPTIONAL { GRAPH graph:instanties-rce { ?vondstlocatie_uri ceo:heeftBasisregistratieRelatie/ceo:heeftGemeente ?gemeente_ }
+               GRAPH graph:owms { ?gemeente_ skos:prefLabel ?gemeente } }
+    OPTIONAL { GRAPH graph:instanties-rce { ?vondstlocatie_uri ceo:heeftBasisregistratieRelatie/ceo:heeftProvincie ?provincie_ }
+               GRAPH graph:owms { ?provincie_ skos:prefLabel ?provincie } }
+}
