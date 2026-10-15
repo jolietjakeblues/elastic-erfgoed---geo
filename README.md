@@ -281,10 +281,9 @@ De totalen waren in alle gevallen gelijk (2.108 / 4.780 / 1.174 / 571 / 8.782).
 - Een schuine streep in de zoekvraag wordt een gewoon teken, zodat niemand een zware reguliere expressie (`/.*a.*/`) naar de service kan sturen; `greppel/sloot` werkt daardoor ook (gaf eerder een syntaxfout).
 - Brontekst komt altijd als tekst in de pagina; links alleen als http(s) en registerlinks alleen naar bekende registers; CSV-cellen die met `=`, `+`, `-` of `@` beginnen krijgen een `'`.
 - Wordt de Triply-service bijgewerkt (503, *not ready*), dan zegt de demo dat in plaats van een algemene fout.
-- Een onbekende URL geeft `web/404.html` (`not_found_handling` in `wrangler.jsonc`). Favicon: `web/favicon.svg` en `web/favicon-512.png` (ook als Open Graph-afbeelding).
+- Een onbekende URL geeft `web/404.html` (`not_found_handling` in `wrangler.jsonc`). Favicon: `web/favicon.svg` en `web/favicon-32.png` (tabblad), `web/favicon.ico` (oudere browsers), `web/favicon-180.png` (iPhone) en `web/favicon-512.png` (afbeelding bij een gedeelde link, Open Graph).
 - Een archeologisch terrein heeft een link naar hetzelfde terrein in de [Archeologie-demo](https://elastic-archeologie.jolietjakeblues64.workers.dev/) (`?object=archeologischterrein:<CHOI>`), waar staat wat erin ligt.
 - Een rijksmonument met archeologische terreinen heeft een link naar die terreinen in de Archeologie-demo (`?binnen=rijksmonument:<CHOI>`).
-- Ontwerpbestanden van de favicon en de 404-pagina staan in `ontwerp/`, buiten `web/`, zodat ze niet online komen.
 
 ## Lokaal starten
 
@@ -330,7 +329,8 @@ npx wrangler deploy
 | `triply/elastic-service-nl.json`, `-nl2.json` | Eerdere versies, ter vergelijking |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
 | `web/_headers` | Beveiligings- en indexeringsheaders (CSP, noindex) |
-| `web/404.html`, `web/favicon.svg`, `web/favicon-512.png` | 404-pagina en pictogram |
+| `web/404.html`, `web/kaart-404.webp` | 404-pagina |
+| `web/favicon.svg`, `web/favicon.ico`, `web/favicon-32.png`, `web/favicon-180.png`, `web/favicon-512.png` | pictogram en afbeelding bij een gedeelde link |
 | `triply/construct/*.rq` | CONSTRUCT-queries voor gezichten, werelderfgoed, complexen en archeologische rijksmonumenten met hun terreinen |
 | `triply/construct/archeologie/*.rq` | Kopieën van de queries voor `archeologie-sdo` (leidend: [elastic-archeologie](https://github.com/jolietjakeblues/elastic-archeologie)) |
 

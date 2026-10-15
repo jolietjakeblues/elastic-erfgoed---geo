@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 const types = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp', ico: 'image/x-icon' };
-const files = new Set(['index.html', 'style.css', 'app.js', 'search.js', 'geo.js', 'data/gebieden.json', '404.html', 'kaart-404.webp', 'favicon.svg', 'favicon.ico', ...[16, 32, 48, 180, 192, 512].map(size => `favicon-${size}.png`)]);
+const files = new Set(['index.html', 'style.css', 'app.js', 'search.js', 'geo.js', 'data/gebieden.json', '404.html', 'kaart-404.webp', 'favicon.svg', 'favicon.ico', ...[32, 180, 512].map(size => `favicon-${size}.png`)]);
 // Dezelfde headers als online (web/_headers, blok "/*"), zodat CSP-fouten ook lokaal zichtbaar zijn.
 const headers = Object.fromEntries((await readFile(new URL('./web/_headers', import.meta.url), 'utf-8')).split('\n').filter(line => /^\s+[\w-]+:/.test(line)).map(line => { const [key, ...rest] = line.trim().split(':'); return [key, rest.join(':').trim()]; }));
 const read = name => readFile(new URL(`./web/${name}`, import.meta.url));
