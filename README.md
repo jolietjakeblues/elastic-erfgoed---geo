@@ -274,6 +274,18 @@ De totalen waren in alle gevallen gelijk (2.108 / 4.780 / 1.174 / 571 / 8.782).
 - Gebruikers kunnen zelf wegen in de zoekvraag: `kasteel^3 OR gracht`.
 - Verder te onderzoeken: een `function_score` of `bool.should` die bijvoorbeeld rijksmonumenten met een naam voorrang geeft, of `"type": "most_fields"` / `"best_fields"` in `query_string` (nu de standaard `best_fields`: het beste veld telt, de andere tellen niet mee).
 
+## Beveiliging en publicatie
+
+- [`web/_headers`](web/_headers) zet voor alle bestanden een Content-Security-Policy (eigen bestanden, ook `data/gebieden.json`; Leaflet van unpkg met SRI; kaarttegels van PDOK; de Triply-services van de RCE), `frame-ancestors 'none'`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` en `X-Robots-Tag: noindex`. `server.mjs` stuurt lokaal dezelfde headers mee.
+- `noindex` staat ook als meta-tag in de pagina: dit is een demo.
+- Een schuine streep in de zoekvraag wordt een gewoon teken, zodat niemand een zware reguliere expressie (`/.*a.*/`) naar de service kan sturen; `greppel/sloot` werkt daardoor ook (gaf eerder een syntaxfout).
+- Brontekst komt altijd als tekst in de pagina; links alleen als http(s) en registerlinks alleen naar bekende registers; CSV-cellen die met `=`, `+`, `-` of `@` beginnen krijgen een `'`.
+- Wordt de Triply-service bijgewerkt (503, *not ready*), dan zegt de demo dat in plaats van een algemene fout.
+- Een onbekende URL geeft `web/404.html` (`not_found_handling` in `wrangler.jsonc`). Favicon: `web/favicon.svg` en `web/favicon-512.png` (ook als Open Graph-afbeelding).
+- Een archeologisch terrein heeft een link naar hetzelfde terrein in de [Archeologie-demo](https://elastic-archeologie.jolietjakeblues64.workers.dev/) (`?object=archeologischterrein:<CHOI>`), waar staat wat erin ligt.
+- Een rijksmonument met archeologische terreinen heeft een link naar die terreinen in de Archeologie-demo (`?binnen=rijksmonument:<CHOI>`).
+- Ontwerpbestanden van de favicon en de 404-pagina staan in `ontwerp/`, buiten `web/`, zodat ze niet online komen.
+
 ## Lokaal starten
 
 Vereist Node.js 18 of nieuwer, zonder npm-dependencies.
@@ -317,6 +329,8 @@ npx wrangler deploy
 | `triply/elastic-service-nl3.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
 | `triply/elastic-service-nl.json`, `-nl2.json` | Eerdere versies, ter vergelijking |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
+| `web/_headers` | Beveiligings- en indexeringsheaders (CSP, noindex) |
+| `web/404.html`, `web/favicon.svg`, `web/favicon-512.png` | 404-pagina en pictogram |
 | `triply/construct/*.rq` | CONSTRUCT-queries voor gezichten, werelderfgoed, complexen en archeologische rijksmonumenten met hun terreinen |
 | `triply/construct/archeologie/*.rq` | Kopieën van de queries voor `archeologie-sdo` (leidend: [elastic-archeologie](https://github.com/jolietjakeblues/elastic-archeologie)) |
 

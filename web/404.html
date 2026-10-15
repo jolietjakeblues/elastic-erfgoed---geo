@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>404. Niet op de kaart | Erfgoed SDO/Elastic demo</title>
+  <meta name="description" content="Deze pagina is niet gevonden. Zoek verder in het erfgoed.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .notfound-hero{background:#f3f3f3;padding:48px 0 56px}
+    .notfound-inner{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center}
+    .notfound-copy h1{font-size:clamp(2rem,4vw,3.3rem);line-height:1.15;margin:0 0 24px;color:#154273}
+    .notfound-copy p{font-size:1.1rem;line-height:1.55;margin:0 0 26px;max-width:650px}
+    .notfound-action{display:inline-block;background:#01689b;color:#fff;text-decoration:none;font-weight:bold;padding:14px 22px}
+    .notfound-action:hover,.notfound-action:focus{background:#154273;color:#fff}
+    .notfound-map{width:100%;height:auto;min-height:290px;object-fit:cover;border:1px solid #ccc}
+    .notfound-footer{padding:32px 0}
+    .notfound-footer p{font-size:.86rem;color:#696969}
+    @media(max-width:760px){.notfound-inner{grid-template-columns:1fr}.notfound-hero{padding:32px 0}.notfound-map{min-height:0}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Direct naar inhoud</a>
+  <header class="site-header">
+    <div class="brand"><p><strong>Erfgoed SDO/Elastic demo</strong><br>Technische demonstrator op open data van de RCE</p></div>
+    <nav class="bar" aria-label="Kruimelpad"><div class="wrap"><ol class="crumbs"><li><a href="/">Demo</a></li><li aria-current="page">Pagina niet gevonden</li></ol></div></nav>
+  </header>
+  <main id="main">
+    <section class="notfound-hero"><div class="wrap notfound-inner">
+      <div class="notfound-copy"><h1>404. Niet op de kaart.</h1>
+      <p>We hebben op deze locatie gezocht, maar geen pagina aangetroffen. Misschien ligt die ergens anders.</p>
+      <a class="notfound-action" href="/">Terug naar erfgoed zoeken →</a></div>
+      <img class="notfound-map" src="/kaart-404.webp" alt="Kaart met erfgoedlocaties en een onbekende locatie, aangegeven met een vraagteken." width="768" height="500">
+    </div></section>
+  </main>
+  <footer class="notfound-footer"><div class="wrap"><p>Dit is een demo. De scripts, index en service kunnen zonder aankondiging wijzigen of verdwijnen.</p></div></footer>
+</body>
+</html>

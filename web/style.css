@@ -79,8 +79,11 @@ article:hover { border-color: var(--grijs-5); }
 article.selected { border-color: var(--geel); box-shadow: inset 4px 0 0 var(--geel); }
 .number { font-size: .8rem; color: var(--grijs-6); margin: 0; }
 article h3 { color: var(--blauw); }
-.metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 20px; font-size: .85rem; line-height: 1.5; margin: 10px 0; }
-.metadata div { display: flex; gap: 6px; } dt { font-weight: 700; } dd { margin: 0; }
+/* Metadata: twee kolommen als er ruimte is, anders één. Labels (dt) breken nooit midden in een woord af en krimpen
+   niet; alleen de waarde (dd) mag afbreken. Het kaartje zelf heeft overflow-wrap: anywhere voor lange URL's. */
+.metadata { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 2px 20px; font-size: .85rem; line-height: 1.5; margin: 10px 0; }
+.metadata div { display: flex; gap: 6px; min-width: 0; }
+dt { font-weight: 700; flex: none; white-space: nowrap; overflow-wrap: normal; } dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .match { padding: 8px 12px; border-left: 4px solid var(--geel); background: var(--geel-zacht); margin: 8px 0; font-size: .9rem; line-height: 1.55; }
 mark { background: var(--geel-licht); color: #000; font-weight: 700; padding: 0 1px; }
 article details { margin-top: 10px; font-size: .9rem; } .description { white-space: pre-line; }
@@ -92,7 +95,8 @@ article details { margin-top: 10px; font-size: .9rem; } .description { white-spa
 
 /* Kaart */
 #map-panel { position: sticky; top: 16px; }
-#map { height: calc(100vh - 140px); min-height: 360px; border: 1px solid var(--grijs-3); background: var(--grijs-1); }
+/* Ruimte onder de kaart voor legenda en telling, zodat die in beeld blijven naast de (meescrollende) kaart. */
+#map { height: calc(100vh - 290px); min-height: 360px; border: 1px solid var(--grijs-3); background: var(--grijs-1); }
 #map-info { margin-top: 8px; }
 .label-marker span { position: absolute; transform: translate(-50%, calc(-100% - 6px)); padding: 1px 6px; background: var(--blauw); color: #fff; font: 700 12px/1.4 "RO Sans", Calibri, Verdana, sans-serif; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
 .label-marker span::after { content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: var(--blauw); }
@@ -148,7 +152,7 @@ dialog ul { padding-left: 20px; font-size: .9rem; line-height: 1.5; } dialog li 
 }
 
 /* Erfgoed: soorten, relaties, gebied en context */
-:root { --rijksmonument: #01689b; --complex: #a90061; --archeologischterrein: #673327; --gezicht: #39870c; --werelderfgoed: #e17000; }
+:root { --rijksmonument: #01689b; --complex: #a90061; --archeologischterrein: #673327; --gezicht: #39870c; --werelderfgoed: #b85500; }
 [data-soort=rijksmonument] { --kleur: var(--rijksmonument); } [data-soort=complex] { --kleur: var(--complex); }
 [data-soort=archeologischterrein] { --kleur: var(--archeologischterrein); } [data-soort=gezicht] { --kleur: var(--gezicht); }
 [data-soort=werelderfgoed] { --kleur: var(--werelderfgoed); } [data-soort=binnen] { --kleur: #000; }
