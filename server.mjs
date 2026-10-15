@@ -6,7 +6,7 @@ const files = new Set(['index.html', 'style.css', 'app.js', 'search.js', 'geo.js
 const headers = Object.fromEntries((await readFile(new URL('./web/_headers', import.meta.url), 'utf-8')).split('\n').filter(line => /^\s+[\w-]+:/.test(line)).map(line => { const [key, ...rest] = line.trim().split(':'); return [key, rest.join(':').trim()]; }));
 const read = name => readFile(new URL(`./web/${name}`, import.meta.url));
 createServer(async (req, res) => {
-  const path = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
+  const path = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost').pathname.slice(1) || 'index.html';
   if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
   const found = files.has(path);
   try {
