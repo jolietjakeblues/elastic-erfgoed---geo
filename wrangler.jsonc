@@ -1,9 +1,11 @@
 // Cloudflare Worker die alleen de statische bestanden uit web/ serveert (geen Worker-script).
 // De browser praat zelf rechtstreeks met de RCE Elasticsearch-service.
+// Headers (CSP, noindex) staan in web/_headers; een onbekende URL geeft web/404.html.
 {
   "name": "erfgoed-sdo-elastic-demo",
   "compatibility_date": "2026-10-07",
   "assets": {
-    "directory": "./web"
+    "directory": "./web",
+    "not_found_handling": "404-page"
   }
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { queryFields, WEIGHT, buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
+import { veiligeZoekvraag, archeologieUrl, archeologieMonumentUrl, queryFields, WEIGHT, buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, bucketsOf, gebiedClause, partsClause, withinClause, nearClause, ligtInQuery, BINNEN, fields, safeUrl, registerLink, soortVan, toParams, fromParams, describe, toCsv, BASE, EXPORT_MAX } from '../web/search.js';
 const region = `${fields.addressRegion}.keyword`, type = `${fields.additionalType}.keyword`;
 const soort = name => ({ term: { '@id.soort': name } });
 const orvelte = { soort: 'gezicht', nummer: '1325', naam: 'Orvelte', rijksmonument: ['1', '2'], complex: ['9'] };
@@ -121,4 +121,13 @@ test('Weging: naam en type tellen zwaarder in Alles en Exact, alleen in de query
   assert.deepEqual(buildExportQuery({ query: 'molens' }).query.bool.must[0].query_string.fields, queryFields('Alles'));
   assert.match(describe({ query: 'molens' }).join(' '), /3× zo zwaar/);
   assert.doesNotMatch(describe({ query: 'molens', sort: 'naam' }).join(' '), /zwaar/);
+});
+test('Geen reguliere expressies; terrein naar de archeologiedemo', () => {
+  assert.equal(veiligeZoekvraag('greppel/sloot'), String.raw`greppel\/sloot`);
+  assert.equal(buildQuery({ query: '/.*a.*/' }).query.query_string.query, String.raw`\/.*a.*\/`);
+  assert.equal(veiligeZoekvraag(String.raw`a\/b`), String.raw`a\/b`);
+  assert.equal(archeologieUrl(`${BASE}archeologischterrein/10123020`), 'https://elastic-archeologie.jolietjakeblues64.workers.dev/?object=archeologischterrein%3A10123020');
+  assert.equal(archeologieUrl(`${BASE}rijksmonument/1`), null);
+  assert.equal(archeologieMonumentUrl(`${BASE}rijksmonument/45708`), 'https://elastic-archeologie.jolietjakeblues64.workers.dev/?binnen=rijksmonument%3A45708');
+  assert.equal(archeologieMonumentUrl(`${BASE}complex/1`), null);
 });

@@ -1,4 +1,4 @@
-import { buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, lookupQuery, partsClause, withinClause, nearClause, gebiedenListQuery, ligtInQuery, AFSTANDEN, bucketsOf, search, facets, fields, sorts, soorten, soortVan, values, textValue, safeUrl, registerLink, toParams, fromParams, describe, toCsv, DEFAULT_FIELD, PAGE_SIZE, MAX_WINDOW, EXPORT_MAX } from './search.js';
+import { archeologieUrl, archeologieMonumentUrl, buildQuery, buildExportQuery, buildGebiedQuery, buildRelationQuery, lookupQuery, partsClause, withinClause, nearClause, gebiedenListQuery, ligtInQuery, AFSTANDEN, bucketsOf, search, facets, fields, sorts, soorten, soortVan, values, textValue, safeUrl, registerLink, toParams, fromParams, describe, toCsv, DEFAULT_FIELD, PAGE_SIZE, MAX_WINDOW, EXPORT_MAX } from './search.js';
 import { geometryFor, WKT_FIELD } from './geo.js';
 const $ = id => document.getElementById(id);
 const blank = () => ({ query: '', field: DEFAULT_FIELD, filters: {}, page: 0, sort: 'relevantie', binnen: null, jokers: state?.jokers ?? false });
@@ -6,7 +6,7 @@ let state; state = blank();
 let controller, needsFit = false, lastTotal = 0;
 const cards = new Map(), markers = new Map(), shapes = new Map(), relationSlots = new Map();
 const wide = window.matchMedia('(min-width: 1100px)');
-const colors = { rijksmonument: '#01689b', complex: '#a90061', archeologischterrein: '#673327', gezicht: '#39870c', werelderfgoed: '#e17000' };
+const colors = { rijksmonument: '#01689b', complex: '#a90061', archeologischterrein: '#673327', gezicht: '#39870c', werelderfgoed: '#b85500' };
 // Leaflet komt van een CDN; zonder Leaflet werkt de demo verder zonder kaart.
 const map = window.L ? L.map('map', { zoomControl: true }).setView([52.2, 5.3], 7) : null;
 const contextLayer = map ? L.featureGroup().addTo(map) : null;
@@ -18,7 +18,8 @@ const plural = (count, one, more) => `${format(count)} ${count === 1 ? one : mor
 // Sommige bronwaarden zijn dubbel gecodeerd (bijv. "K. &amp; J. Wilkensbrug"). Entiteiten worden als
 // tekst gedecodeerd; er komt nooit HTML uit de bron in de pagina.
 const decode = text => (/&[#\w]+;/.test(text) ? new DOMParser().parseFromString(text, 'text/html').body.textContent : text);
-const show = value => decode(textValue(value));
+// Een naam "-" (komt in de bron voor) is geen naam.
+const show = value => { const text = decode(textValue(value)); return text === '-' ? '' : text; };
 function el(tag, text, className) { const node = document.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
 function button(text, callback, className) { const node = el('button', text, className); node.type = 'button'; node.addEventListener('click', callback); return node; }
 function link(text, url) { const node = el('a', text); node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer'; return node; }
@@ -111,7 +112,8 @@ function renderResults(hits) {
     card.addEventListener('click', event => { if (!event.target.closest('a, button, summary, details')) select(hit._id, true); });
     const head = el('p', null, 'number'); head.append(el('span', soorten[soort] ?? 'Object', 'badge'), document.createTextNode(` ${nummer ?? 'zonder nummer'}`));
     // Zonder naam (veel rijksmonumenten): type en adres als kop.
-    const fallback = [values(source[fields.additionalType])[0], values(source[fields.address])[0] ?? values(source[fields.addressLocality])[0]].filter(Boolean).map(decode).join(', ');
+    // Zonder naam: type en adres als kop. Bij een archeologisch terrein is het "type" de waardering; dan liever de soort.
+    const fallback = soort === 'archeologischterrein' ? '' : [values(source[fields.additionalType])[0], values(source[fields.address])[0] ?? values(source[fields.addressLocality])[0]].filter(Boolean).map(decode).join(', ');
     card.append(head, el('h3', show(source[fields.name]) || fallback || `${soorten[soort] ?? 'Object'} zonder naam`));
     const metadata = el('dl', null, 'metadata');
     for (const [key, label] of Object.entries({ address: 'Adres', postalCode: 'Postcode', addressLocality: 'Plaats', addressRegion: 'Provincie/regio', category: 'Categorie', additionalType: 'Type' })) {
@@ -136,6 +138,12 @@ function renderResults(hits) {
     const links = el('div', null, 'links');
     for (const raw of values(source['@id'])) { const url = safeUrl(raw); if (url) { links.append(link('Linked Data', url)); const uri = el('p', null, 'uri'); uri.append(link(raw, url)); card.append(uri); } }
     for (const raw of values(source[fields.sameAs])) { const register = registerLink(raw); if (register) links.append(link(register.label, register.url)); }
+    // Een archeologisch terrein heeft hier geen locatie en weinig gegevens; de archeologiedemo toont wat erin ligt.
+    const archeologie = soort === 'archeologischterrein' && archeologieUrl(source['@id']);
+    if (archeologie) links.append(link('In de archeologiedemo', archeologie));
+    // Een rijksmonument met archeologische terreinen: die terreinen (en wat erin ligt) in de archeologiedemo.
+    const terreinenUrl = soort === 'rijksmonument' && values(source[fields.containsPlace]).length && archeologieMonumentUrl(source['@id']);
+    if (terreinenUrl) links.append(link(`${values(source[fields.containsPlace]).length === 1 ? 'Terrein' : 'Terreinen'} in de archeologiedemo`, terreinenUrl));
     if (map && geometryFor(source)) links.append(button('Toon op kaart', () => select(hit._id, true)));
     if (geometryFor(source) && nummer && (soort === 'rijksmonument' || soort === 'complex')) links.append(button('In de buurt', () => openBinnen(`rond:${soort}:${nummer}:500`)));
     card.append(links); $('results').append(card);
@@ -231,7 +239,9 @@ function renderMap(hits) {
   for (const shape of shapes.values()) if (isArea(shape.soort)) shape.bringToBack();
   const total = counts.punt + counts.vlak;
   needsFit = total > 0 || contextLayer.getLayers().length > 0; fitMarkers();
-  $('map-info').textContent = hits.length ? `Op kaart: ${total} van ${hits.length} getoonde resultaten (${counts.punt} als punt, ${counts.vlak} als vlak met het nummer op het zwaartepunt).` : 'Geen resultaten om op de kaart te tonen.';
+  const zonder = hits.length - total;
+  const terreinen = hits.filter(hit => soortVan(hit._source?.['@id']) === 'archeologischterrein').length;
+  $('map-info').textContent = hits.length ? `Op kaart: ${total} van ${hits.length} getoonde resultaten (${counts.punt} als punt, ${counts.vlak} als vlak met het nummer op het zwaartepunt).${zonder ? ` ${zonder === terreinen ? 'De andere zijn archeologische terreinen; die hebben geen eigen locatie (wel het rijksmonument waarin ze liggen).' : 'De andere hebben geen bruikbare locatie.'}` : ''}` : 'Geen resultaten om op de kaart te tonen.';
   return total;
 }
 // Een verborgen kaart heeft geen afmetingen; pas passend inzoomen zodra de kaart zichtbaar is.
