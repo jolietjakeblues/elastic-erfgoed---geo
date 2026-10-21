@@ -24,12 +24,12 @@ Voorbeelden:
 ## Services
 
 ```text
-POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl3/_search
+POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl4/_search
 ```
 
 De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). Er wordt geen SPARQL gebruikt.
 
-De demo gebruikt de service **`Erfgoed-sdo-nl3`**, niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
+De demo gebruikt de service **`Erfgoed-sdo-nl4`** (sinds 21 oktober 2026), niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
 
 | Service | Index template | Status |
 |---|---|---|
@@ -37,8 +37,8 @@ De demo gebruikt de service **`Erfgoed-sdo-nl3`**, niet de standaardservice `Erf
 | `Erfgoed-sdo-geo` | `triply/elastic-service-geo.json`: geometrie, nummer | vorige versie van de demo |
 | `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort (versie 1) | test, kan weg |
 | `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` (versie 2) | test, kan weg zodra `-nl3` live goed draait |
-| `Erfgoed-sdo-nl3` | `triply/elastic-service-nl3.json` (versie 3) | **gebruikt door de demo** |
-| `Erfgoed-sdo-nl4` | `triply/elastic-service-nl4.json` (versie 4): reparatie voor terp en kapel | voorbereid, nog niet aangemaakt (zie *Versie 4*) |
+| `Erfgoed-sdo-nl3` | `triply/elastic-service-nl3.json` (versie 3) | vorige versie; kan weg zodra `-nl4` live goed draait |
+| `Erfgoed-sdo-nl4` | `triply/elastic-service-nl4.json` (versie 4): reparatie voor terp en kapel | **gebruikt door de demo** (zie *Versie 4*) |
 
 ## Inhoud van de index (oktober 2026)
 
@@ -239,7 +239,11 @@ De reparatie in `triply/elastic-service-nl4.json` gebruikt geen scripts, want Tr
 
 Bij `terp` en `kapel` komt er niets bij. Wat wegvalt, komt allemaal uit de valse woorden hierboven. Echte terpen en kapellen worden nog gevonden (wierde, dorpsterp, kerkterp, kapelletje, wegkapelletje, annakapel, grafkapel).
 
-Om dit live te zetten:
+**Live sinds 21 oktober 2026.** `Erfgoed-sdo-nl4` is aangemaakt en draait (801.667 statements, 5 graphs). `node tests/compare-services.mjs Erfgoed-sdo-nl4 Erfgoed-sdo-nl3` geeft voor alle 19 vaste zoekvragen en de 9 meervoudsparen dezelfde aantallen; soort, geo_shape (66.254) en sorteren zijn gelijk. Met de query van het zoekveld Alles gaf de live service dezelfde aantallen als de lokale test: `terp` 2.566 → 591, `terpen` 2.357 → 584, `kapel` 8.972 → 1.989, en `dakkapel` (7.389), `huisterp` (25) en `grafkapel` (81) gelijk. `npm test` en `npm run test:live` gelukt. De demo (`ENDPOINT` in `web/search.js`) wijst nu naar `-nl4`.
+
+Bekend probleem, ook in `-nl4`: voorletters zonder spatie ("P.J.H.Cuypers") worden één woord, zodat *cuypers* die objecten niet vindt. In de CHO-demo (`C:\AI\elastic-ceo`) is dat opgelost met de tekenfilter `punt_tussen_letters`; hier zou dat een `-nl5` worden.
+
+Zo is het live gezet:
 
 1. De mislukte service `Erfgoed-sdo-nl4` (status *Error*) eerst verwijderen, met het kruisje op de servicekaart.
 2. Service aanmaken (token met *Management access*):
@@ -248,7 +252,13 @@ Om dit live te zetten:
    curl.exe -H "Authorization: Bearer $env:TRIPLY_TOKEN" -H "Content-Type: application/json" -X POST "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services" -d "@C:\AI\elastic-erfgoed\triply\elastic-service-nl4.json"
    ```
 
-3. Vergelijken als de service klaar is: `node tests/compare-services.mjs Erfgoed-sdo-nl4 Erfgoed-sdo-nl3`.
+3. Wachten tot bij `Erfgoed-sdo-nl4` `running` staat:
+
+   ```bash
+   curl.exe -s "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services" | Select-String -Pattern '"name":"[^"]*","id"|"status":"[a-z]*"' -AllMatches | ForEach-Object { $_.Matches.Value }
+   ```
+
+   Daarna vergelijken: `node tests/compare-services.mjs Erfgoed-sdo-nl4 Erfgoed-sdo-nl3`.
 4. In `web/search.js` (`ENDPOINT`) `Erfgoed-sdo-nl3` vervangen door `Erfgoed-sdo-nl4`, `npm test` en `npm run test:live` draaien, en deze README bijwerken (service, vergelijking, geschiedenis). De Content-Security-Policy noemt alleen het domein en hoeft niet te veranderen.
 
 ### Geschiedenis
@@ -256,7 +266,7 @@ Om dit live te zetten:
 - **Versie 1** (`Erfgoed-sdo-nl`): Snowball-stemmer `dutch` en een langere samenstellingslijst. `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral in Lekkerkerk.
 - **Versie 2** (`Erfgoed-sdo-nl2`): stemmer `dutch_kp`, adresvelden zonder taalverwerking, kerk/huis/dijk uit de samenstellingslijst. Daardoor vond `kerk` geen dorpskerk meer en bleven zeven meervouden ongelijk.
 - **Versie 3** (`Erfgoed-sdo-nl3`): vaste meervoudsregels en zoekuitbreiding voor kerk en dijk.
-- **Versie 4** (`Erfgoed-sdo-nl4`, voorbereid): `terp` niet meer gesplitst maar bij zoeken uitgebreid; bij `kapel` worden dakkapel, kapelaan en Kapelle vooraf onherkenbaar gemaakt. Zo tellen waterput en dakkapel niet meer mee (zie *Versie 4*).
+- **Versie 4** (`Erfgoed-sdo-nl4`, live sinds 21 oktober 2026): `terp` niet meer gesplitst maar bij zoeken uitgebreid; bij `kapel` worden dakkapel, kapelaan en Kapelle vooraf onherkenbaar gemaakt. Zo tellen waterput en dakkapel niet meer mee (zie *Versie 4*).
 
 ### Nog te verbeteren
 
