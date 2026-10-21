@@ -24,12 +24,12 @@ Voorbeelden:
 ## Services
 
 ```text
-POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl4/_search
+POST https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services/Erfgoed-sdo-nl5/_search
 ```
 
 De browser praat rechtstreeks met de Elasticsearch-service, want die staat CORS toe (`Access-Control-Allow-Origin: *`). Er wordt geen SPARQL gebruikt.
 
-De demo gebruikt de service **`Erfgoed-sdo-nl4`** (sinds 21 oktober 2026), niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
+De demo gebruikt de service **`Erfgoed-sdo-nl5`** (sinds 21 oktober 2026, avond), niet de standaardservice `Erfgoed-sdo`. Het verschil zit in een index template: ruimtelijk zoeken, sorteren op nummer, de soort als eigen veld en Nederlandse taalverwerking (zie *Ruimtelijk zoeken* en *Nederlandse taalverwerking*).
 
 | Service | Index template | Status |
 |---|---|---|
@@ -38,10 +38,10 @@ De demo gebruikt de service **`Erfgoed-sdo-nl4`** (sinds 21 oktober 2026), niet 
 | `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort (versie 1) | verwijderd; geschiedenis |
 | `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` (versie 2) | verwijderd; geschiedenis |
 | `Erfgoed-sdo-nl3` | `triply/elastic-service-nl3.json` (versie 3) | verwijderd (21 oktober 2026); geschiedenis |
-| `Erfgoed-sdo-nl4` | `triply/elastic-service-nl4.json` (versie 4): reparatie voor terp en kapel | **gebruikt door de demo** (zie *Versie 4*) |
-| `Erfgoed-sdo-nl5` | `triply/elastic-service-nl5.json` (versie 5): de gedeelde analyse uit `triply/nl-analyse.json` | voorbereid en lokaal getest, nog niet aangemaakt (zie *Versie 5*) |
+| `Erfgoed-sdo-nl4` | `triply/elastic-service-nl4.json` (versie 4): reparatie voor terp en kapel | vorige versie; verwijderen zodra `-nl5` live goed draait (ook in de archeologiedemo) |
+| `Erfgoed-sdo-nl5` | `triply/elastic-service-nl5.json` (versie 5): de gedeelde analyse uit `triply/nl-analyse.json` | **gebruikt door de demo** en door de archeologiedemo (zie *Versie 5*) |
 
-Stand 21 oktober 2026: in `rce/erfgoed-sdo` draait alleen nog `Erfgoed-sdo-nl4`.
+Stand 21 oktober 2026: in `rce/erfgoed-sdo` draaien `Erfgoed-sdo-nl5` en, tot hij verwijderd wordt, `Erfgoed-sdo-nl4`.
 
 ## Inhoud van de index (oktober 2026)
 
@@ -264,7 +264,7 @@ Zo is het live gezet:
    Daarna vergelijken: `node tests/compare-services.mjs Erfgoed-sdo-nl4 Erfgoed-sdo-nl3`.
 4. In `web/search.js` (`ENDPOINT`) `Erfgoed-sdo-nl3` vervangen door `Erfgoed-sdo-nl4`, `npm test` en `npm run test:live` draaien, en deze README bijwerken (service, vergelijking, geschiedenis). De Content-Security-Policy noemt alleen het domein en hoeft niet te veranderen.
 
-### Versie 5: één analyse voor alle demo's (voorbereid)
+### Versie 5: één analyse voor alle demo's
 
 Vanaf versie 5 is er één Nederlandse analyse voor alle demo's: [`triply/nl-analyse.json`](triply/nl-analyse.json). Dat is een kopie van `elastic-ceo/triply/nl-analyse.json`, de bron. Pas de analyse daar aan en kopieer hem hierheen. [`triply/maak-nl5.mjs`](triply/maak-nl5.mjs) maakt `triply/elastic-service-nl5.json`: de template van `-nl4` met alleen een andere analyse (en de naam `Erfgoed-sdo-nl5`). Het script waarschuwt als de kopie afwijkt van de bron.
 
@@ -293,7 +293,9 @@ Ten opzichte van `-nl4` komt erbij:
 | `dakkapel` | 7.389 | 7.390 | |
 | terp, kapel, huisterp, grafkapel, kapelaan, Kapelle, waterput, waterpomp, hunebed, kom, ruine, molen(s), toren, kasteel(en), woning, boerderij, dijk, gracht, sluis, kasteel AND gracht, Lekkerkerk, Nijkerk, Soestdijk, Kerkstraat, linkerkant, Orvelte, Domplein | | | gelijk |
 
-Om dit live te zetten:
+**Live sinds 21 oktober 2026.** `Erfgoed-sdo-nl5` draait (801.667 statements, 5 graphs). `node tests/compare-services.mjs Erfgoed-sdo-nl5 Erfgoed-sdo-nl4` geeft dezelfde aantallen als de lokale test: alle vaste zoekvragen gelijk behalve `kerk` en `godshuis` (+21); met de query van het zoekveld Alles `cuypers` 360 → 383, `kuil` 22 → 65, `graf` 332 → 1.785, `paal` 694 → 2.459, en `terp` (591) en `kapel` (1.989) gelijk. `npm test` en `npm run test:live` gelukt. `ENDPOINT` in `web/search.js` en `ERFGOED_ENDPOINT` in elastic-archeologie wijzen naar `-nl5`.
+
+Zo is het live gezet:
 
 1. Service aanmaken (token met *Management access*):
 
@@ -303,14 +305,14 @@ Om dit live te zetten:
 
 2. Wachten tot bij `Erfgoed-sdo-nl5` `running` staat (statuscommando hierboven bij *Versie 4*), dan vergelijken: `node tests/compare-services.mjs Erfgoed-sdo-nl5 Erfgoed-sdo-nl4`.
 3. In `web/search.js` (`ENDPOINT`) `Erfgoed-sdo-nl4` vervangen door `Erfgoed-sdo-nl5`, `npm test` en `npm run test:live` draaien. Ook in elastic-archeologie (`ERFGOED_ENDPOINT` in `web/search.js`) naar `-nl5`.
-4. Daarna `Erfgoed-sdo-nl4` verwijderen.
+4. Nog te doen: `Erfgoed-sdo-nl4` verwijderen, als beide sites live op `-nl5` draaien.
 
 ### Geschiedenis
 
 - **Versie 1** (`Erfgoed-sdo-nl`): Snowball-stemmer `dutch` en een langere samenstellingslijst. `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral in Lekkerkerk.
 - **Versie 2** (`Erfgoed-sdo-nl2`): stemmer `dutch_kp`, adresvelden zonder taalverwerking, kerk/huis/dijk uit de samenstellingslijst. Daardoor vond `kerk` geen dorpskerk meer en bleven zeven meervouden ongelijk.
 - **Versie 3** (`Erfgoed-sdo-nl3`): vaste meervoudsregels en zoekuitbreiding voor kerk en dijk.
-- **Versie 5** (`Erfgoed-sdo-nl5`, voorbereid): de gedeelde analyse uit `triply/nl-analyse.json` (bron: elastic-ceo), dezelfde als in de archeologie- en CHO-demo (zie *Versie 5*).
+- **Versie 5** (`Erfgoed-sdo-nl5`, live sinds 21 oktober 2026): de gedeelde analyse uit `triply/nl-analyse.json` (bron: elastic-ceo), dezelfde als in de archeologie- en CHO-demo (zie *Versie 5*).
 - **Versie 4** (`Erfgoed-sdo-nl4`, live sinds 21 oktober 2026): `terp` niet meer gesplitst maar bij zoeken uitgebreid; bij `kapel` worden dakkapel, kapelaan en Kapelle vooraf onherkenbaar gemaakt. Zo tellen waterput en dakkapel niet meer mee (zie *Versie 4*).
 
 ### Nog te verbeteren
@@ -418,8 +420,8 @@ npx wrangler deploy
 | `web/data/gebieden.json` | Vooraf berekende koppeling, alleen voor de telling per gebied en de CSV |
 | `scripts/build_gebieden.py` | Bouwt `gebieden.json` |
 | `tests/geo-service.mjs` | Controle van de geo-service |
-| `triply/elastic-service-nl4.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer; reparatie voor terp en kapel) |
-| `triply/elastic-service-nl5.json` | Als `-nl4`, met de gedeelde analyse; voorbereid, nog niet aangemaakt. Gemaakt met `triply/maak-nl5.mjs` |
+| `triply/elastic-service-nl5.json` | Config van de service die de demo gebruikt: als `-nl4`, met de gedeelde analyse. Gemaakt met `triply/maak-nl5.mjs` |
+| `triply/elastic-service-nl4.json` | Vorige versie (taal, soort, geometrie, nummer; reparatie voor terp en kapel); basis voor `-nl5` |
 | `triply/nl-analyse.json` | De gedeelde Nederlandse analyse (kopie; bron is `elastic-ceo/triply/nl-analyse.json`) |
 | `triply/elastic-service-nl.json`, `-nl2.json`, `-nl3.json` | Eerdere versies, alleen nog als geschiedenis (services verwijderd) |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
