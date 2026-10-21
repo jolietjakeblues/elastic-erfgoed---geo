@@ -38,6 +38,7 @@ De demo gebruikt de service **`Erfgoed-sdo-nl3`**, niet de standaardservice `Erf
 | `Erfgoed-sdo-nl` | `triply/elastic-service-nl.json`: + taal, soort (versie 1) | test, kan weg |
 | `Erfgoed-sdo-nl2` | `triply/elastic-service-nl2.json` (versie 2) | test, kan weg zodra `-nl3` live goed draait |
 | `Erfgoed-sdo-nl3` | `triply/elastic-service-nl3.json` (versie 3) | **gebruikt door de demo** |
+| `Erfgoed-sdo-nl4` | `triply/elastic-service-nl4.json` (versie 4): reparatie voor terp en kapel | voorbereid, nog niet aangemaakt (zie *Versie 4*) |
 
 ## Inhoud van de index (oktober 2026)
 
@@ -214,11 +215,48 @@ Met `node tests/compare-services.mjs` (9 oktober 2026), in het zoekveld Alles:
 
 Gracht/grachten (3.023 / 2.843) en sluis/sluizen (1.090 / 1.020) lijken nog te verschillen. In naam, omschrijving en type zijn ze gelijk; het enkelvoud vindt daarnaast straatnamen als "Oude Gracht" en "Oude Sluis". Dat is terecht.
 
+### Versie 4: terp en kapel (voorbereid)
+
+Het probleem in `-nl3`: de splitser (`dictionary_decompounder`) zoekt elk woord uit de lijst overal in een token, ook midden in een ander woord. Voor twee woorden levert dat vooral valse treffers op:
+
+- **terp** zit ook in *waterput*, *waterpartij*, *waterpomp*, *waterpeil*, *vensterpartij* en *interpretatie*. Zoeken op `terp` geeft daardoor 2.566 treffers, met WATERPUT bovenaan.
+- **kapel** zit ook in *dakkapel*, dat alleen al 7.389 treffers heeft, en in *kapelaan*, *kapelanie* en *Oostkapelle*. Zoeken op `kapel` geeft daardoor 8.972 treffers.
+
+De reparatie in `triply/elastic-service-nl4.json` gebruikt geen scripts, want TriplyDB staat die niet toe in een analyzer. Een eerste versie met `condition`-filters gaf bij het aanmaken: *cannot execute scripts using [analysis] context*.
+
+- **terp** gaat uit de samenstellingenlijst. In plaats daarvan breidt de zoekanalyzer `terp`, `terpen`, `wierde` en `wierden` in één richting uit met de echte samenstellingen uit de data, net als bij `kerk` en `dijk`: huisterp, dorpsterp, kerkterp, woonterp, veenterp, hoogterp, kernterp, terpje, terpdorp, terprest, terpboerderij, terpbebouwing, terpvorming, terpafgraving, dorpswierde, wierdedorp, wierdebebouwing en wierdekerkhof. Plaatsnamen als Olterterp en Slappeterp staan er bewust niet in.
+- **kapel** blijft in de samenstellingenlijst, omdat er honderden echte kapellen zijn (doopkapel, grafkapel, mariakapel, annakapel, wegkapelletje, …). Drie tekenfilters (`pattern_replace`, in `nl_index` en `nl_zoeken`) maken de valse woorden vooraf onherkenbaar voor de splitser: *dakkapel* wordt *dakcapel*, *kapela…* (kapelaan, kapelanie) wordt *capela…*, en *kapelle* wordt *capelle*, behalve vóór een *n* of *t* (kapellen, kapelletje). Bij zoeken gebeurt hetzelfde, dus `dakkapel` vindt nog steeds alle dakkapellen.
+
+**Lokaal getest** op 21 oktober 2026, met Elasticsearch 8.17.0 in Docker. De tekst van alle 68.078 documenten (zonder vlakken) komt uit `Erfgoed-sdo-nl3`. Die staat in twee indexen, één met de template van `-nl3` en één met die van `-nl4`. Beide zijn doorzocht met dezelfde query als het zoekveld Alles (`buildQuery` uit `web/search.js`). De `-nl3`-index geeft precies dezelfde aantallen als de live service.
+
+| Zoekvraag | `-nl3` | `-nl4` | Wat wegvalt |
+|---|---:|---:|---|
+| `terp` / `wierde` | 2.566 | 591 | 1.975 treffers: vensterpartij (448), vensterpartijen (316), waterpartij (260), waterput (211), waterpomp (107), waterpeil (86), waterpoort, interpretatie, rechterpand, kloosterpoort, … |
+| `terpen` | 2.357 | 584 | idem |
+| `kapel` / `kapellen` | 8.972 | 1.989 | 6.983 treffers: dakkapel (4.680), dakkapellen (2.961), dakkapelletjes, kapelanie, Kapellerlaan, Oostkapelle, Kapellestraat, … |
+| `huisterp`, `doopkapel`, `grafkapel`, `mariakapel`, `dakkapel(len)`, `kapelaan`, `waterput`, `waterpomp`, `waterpoort` | | | gelijk |
+| `ruine`, `molen(s)`, `toren(s)`, `kasteel`/`kastelen`, `woning(en)`, `boerderij`, `kerk`, `godshuis`, `dijk`, `kasteel AND gracht`, `gracht`, `sluis`, `Lekkerkerk`, `Nijkerk`, `Soestdijk`, `Kerkstraat`, `linkerkant`, `Orvelte`, `Domplein` | | | gelijk |
+
+Bij `terp` en `kapel` komt er niets bij. Wat wegvalt, komt allemaal uit de valse woorden hierboven. Echte terpen en kapellen worden nog gevonden (wierde, dorpsterp, kerkterp, kapelletje, wegkapelletje, annakapel, grafkapel).
+
+Om dit live te zetten:
+
+1. De mislukte service `Erfgoed-sdo-nl4` (status *Error*) eerst verwijderen, met het kruisje op de servicekaart.
+2. Service aanmaken (token met *Management access*):
+
+   ```bash
+   curl.exe -H "Authorization: Bearer $env:TRIPLY_TOKEN" -H "Content-Type: application/json" -X POST "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/erfgoed-sdo/services" -d "@C:\AI\elastic-erfgoed\triply\elastic-service-nl4.json"
+   ```
+
+3. Vergelijken als de service klaar is: `node tests/compare-services.mjs Erfgoed-sdo-nl4 Erfgoed-sdo-nl3`.
+4. In `web/search.js` (`ENDPOINT`) `Erfgoed-sdo-nl3` vervangen door `Erfgoed-sdo-nl4`, `npm test` en `npm run test:live` draaien, en deze README bijwerken (service, vergelijking, geschiedenis). De Content-Security-Policy noemt alleen het domein en hoeft niet te veranderen.
+
 ### Geschiedenis
 
 - **Versie 1** (`Erfgoed-sdo-nl`): Snowball-stemmer `dutch` en een langere samenstellingslijst. `molen` (stam `mol`) en `molens` (stam `molen`) vonden elkaar niet, en `kerk` vond 3.044 adressen, vooral in Lekkerkerk.
 - **Versie 2** (`Erfgoed-sdo-nl2`): stemmer `dutch_kp`, adresvelden zonder taalverwerking, kerk/huis/dijk uit de samenstellingslijst. Daardoor vond `kerk` geen dorpskerk meer en bleven zeven meervouden ongelijk.
 - **Versie 3** (`Erfgoed-sdo-nl3`): vaste meervoudsregels en zoekuitbreiding voor kerk en dijk.
+- **Versie 4** (`Erfgoed-sdo-nl4`, voorbereid): `terp` niet meer gesplitst maar bij zoeken uitgebreid; bij `kapel` worden dakkapel, kapelaan en Kapelle vooraf onherkenbaar gemaakt. Zo tellen waterput en dakkapel niet meer mee (zie *Versie 4*).
 
 ### Nog te verbeteren
 
@@ -326,6 +364,7 @@ npx wrangler deploy
 | `scripts/build_gebieden.py` | Bouwt `gebieden.json` |
 | `tests/geo-service.mjs` | Controle van de geo-service |
 | `triply/elastic-service-nl3.json` | Config van de service die de demo gebruikt (taal, soort, geometrie, nummer) |
+| `triply/elastic-service-nl4.json` | Als `-nl3`, met de reparatie voor terp en kapel; voorbereid, nog niet aangemaakt |
 | `triply/elastic-service-nl.json`, `-nl2.json` | Eerdere versies, ter vergelijking |
 | `tests/compare-services.mjs` | Vergelijkt twee services op dezelfde zoekvragen |
 | `web/_headers` | Beveiligings- en indexeringsheaders (CSP, noindex) |
